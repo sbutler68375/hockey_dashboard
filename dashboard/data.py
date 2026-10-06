@@ -39,7 +39,6 @@ _SEASON_WIDGET_KEY = "_season_toggle"
 # Same pattern for the team picked with the header's logo button.
 # None means no team selected (all teams).
 _TEAM_STATE_KEY = "selected_team"
-ALL_TEAMS = "All"
 
 
 @st.cache_data(ttl=CACHE_TTL_SECONDS)
@@ -69,6 +68,32 @@ def load_team_season_stats(season: int) -> pd.DataFrame:
     return get_team_season_stats(season)
 
 
+def team_results(games: pd.DataFrame, team: str) -> pd.DataFrame:
+    """One team's games from that team's point of view, newest first.
+
+    Adds: opponent, home_away ("Home"/"Away"), outcome ("W", "L", or "OT"
+    for a loss in overtime or a shootout -- the NHL's "OT loss", worth a
+    point in the standings) and result, e.g. "W 3-2" (team's goals first).
+    """
+    games = games[(games["home_team"] == team) | (games["away_team"] == team)]
+    games = games.sort_values("game_date", ascending=False).copy()
+    is_home = games["home_team"] == team
+    team_score = games["home_score"].where(is_home, games["away_score"]).astype(int)
+    opp_score = games["away_score"].where(is_home, games["home_score"]).astype(int)
+    games["opponent"] = games["away_team"].where(is_home, games["home_team"])
+    games["home_away"] = is_home.map({True: "Home", False: "Away"})
+    went_past_regulation = games["last_period_type"].isin(["OT", "SO"])
+    outcome = (team_score > opp_score).map({True: "W", False: "L"})
+    games["outcome"] = outcome.mask((outcome == "L") & went_past_regulation, "OT")
+    games["result"] = games["outcome"] + " " + team_score.astype(str) + "-" + opp_score.astype(str)
+    return games
+
+
+def record_text(results: pd.DataFrame) -> str:
+    """W-L-OT record for team_results() rows, e.g. "6-3-1"."""
+    return "-".join(str(int((results["outcome"] == o).sum())) for o in ("W", "L", "OT"))
+
+
 def team_list() -> list[str]:
     return sorted(TEAM_ABBREVIATIONS)
 
@@ -94,29 +119,6 @@ def selected_team() -> str | None:
 
 def _select_team(team: str | None) -> None:
     st.session_state[_TEAM_STATE_KEY] = team
-
-
-def team_selectbox(label: str, key: str, include_all: bool = True, **kwargs) -> str | None:
-    """A team dropdown kept in sync with the header's logo button: it opens
-    on the selected team, and changing it changes the selected team for every
-    page. Returns the chosen team, or None for "All teams".
-
-    With include_all=False (a page that always needs one team), it falls back
-    to the first team when none is selected, without changing the selection.
-    """
-    options = ([ALL_TEAMS] if include_all else []) + team_list()
-    st.session_state[key] = selected_team() or options[0]
-
-    def store_choice() -> None:
-        choice = st.session_state[key]
-        _select_team(None if choice == ALL_TEAMS else choice)
-
-    choice = st.selectbox(
-        label, options, key=key, on_change=store_choice,
-        format_func=lambda t: "All teams" if t == ALL_TEAMS else f"{t} - {team_display_name(t)}",
-        **kwargs,
-    )
-    return None if choice == ALL_TEAMS else choice
 
 
 def _logo_label(url: str, alt: str) -> str:
@@ -194,8 +196,8 @@ def page_header(title: str) -> int:
     """Render a page title with the team logo button and the season toggle
     switch (last season <-> Current) in the top-right corner, and return the
     selected season. Every page calls this in place of st.title() so the
-    controls sit in the same spot everywhere; use selected_team() (or
-    team_selectbox()) for the team."""
+    controls sit in the same spot everywhere; use selected_team() for the
+    team."""
     is_current = selected_season() == current_season()
     st.session_state[_SEASON_WIDGET_KEY] = is_current
 

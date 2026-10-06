@@ -22,7 +22,7 @@ is documented in place rather than hidden, including in this README.
   with data leakage prevention as a first-class design constraint, not an afterthought
 - **Trains and compares** Logistic Regression, Random Forest, and XGBoost against a
   majority-class baseline, using a time-aware (chronological) train/val/test split
-- **Visualizes** standings, team form trends, player leaderboards, and game history in a
+- **Visualizes** standings, team form trends, player leaderboards, and each team's season games in a
   multi-page Streamlit + Plotly dashboard
 
 ## Architecture

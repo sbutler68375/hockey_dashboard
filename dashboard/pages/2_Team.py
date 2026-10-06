@@ -4,8 +4,9 @@ win-percentage trend chart over the season."""
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -16,17 +17,27 @@ from dashboard.data import (
     load_standings,
     load_team_season_stats,
     page_header,
-    team_selectbox,
+    record_text,
+    selected_team,
+    team_results,
 )
 from dashboard.images import player_headshot_url, team_logo_url
-from dashboard.style import apply_theme, section_label, style_chart
+from dashboard.style import COLORS, apply_theme, result_style, section_label, style_chart
 from src.features.team_form import add_rolling_form_features, build_team_game_log
 
-st.set_page_config(page_title="Teams", page_icon="🏒", layout="wide")
-apply_theme()
-season = page_header("Team Profile")
+# Form chart settings.
+FORM_WINDOW = 10           # games per rolling win % point
+MIN_GAMES_FOR_TREND = 20   # fewer full-window points than this makes the slope noise
+TREND_FLAT_POINTS = 5      # trend changes smaller than this (pct points) read as "flat"
 
-team = team_selectbox("Select a team", key="teams_page_team", include_all=False)
+st.set_page_config(page_title="Team", page_icon="🏒", layout="wide")
+apply_theme()
+season = page_header("Team")
+
+team = selected_team()
+if team is None:
+    st.info("Choose a team with the logo button in the top-right corner to see its profile.")
+    st.stop()
 
 standings = load_standings(season)
 team_standing = standings[standings["team_abbrev"] == team] if not standings.empty else standings
@@ -74,34 +85,97 @@ if team_form.empty:
 else:
     with st.container(border=True):
         section_label("Form")
-        st.markdown(f"###### Win % (last 10 games), {team}")
-        # Plot ACTUAL (unshifted) rolling win% for a readable trend line --
-        # the shifted version used for model training intentionally excludes
-        # each game's own result, which would look one game "behind" here.
-        team_form_display = team_form.copy()
-        team_form_display["actual_win_pct_last_10"] = (
-            team_form_display["win"].rolling(10, min_periods=1).mean()
+        # Plot ACTUAL (unshifted) rolling win% -- the shifted version used
+        # for model training intentionally excludes each game's own result,
+        # which would look one game "behind" here.
+        form_df = team_form.sort_values("game_date").reset_index(drop=True).copy()
+        form_df["game_number"] = range(1, len(form_df) + 1)
+        form_df["game_date"] = pd.to_datetime(form_df["game_date"])
+        # NaN until game FORM_WINDOW, so every plotted point really is a
+        # full 10-game average (a 1-3 game "average" swings to 0%/100%).
+        form_df["form"] = form_df["win"].rolling(FORM_WINDOW).mean()
+        season_avg = form_df["win"].mean()
+        full = form_df.dropna(subset=["form"])
+
+        fig = go.Figure()
+        hover = "Game %{x} (%{customdata[0]}, vs %{customdata[1]})<br>%{y:.0%}<extra></extra>"
+        if not full.empty:
+            st.markdown(f"###### Win % over the last {FORM_WINDOW} games, {team}")
+            fig.add_scatter(
+                x=full["game_number"], y=full["form"], mode="lines+markers",
+                name=f"{FORM_WINDOW}-game win %", line=dict(color=COLORS["accent"], width=2),
+                customdata=full[["game_date", "opponent"]].assign(
+                    game_date=full["game_date"].dt.strftime("%b %d")
+                ).to_numpy(),
+                hovertemplate=hover,
+            )
+        else:
+            # Too early in the season for a 10-game average -- show the
+            # running season win % instead.
+            st.markdown(f"###### Win % so far, {team}")
+            fig.add_scatter(
+                x=form_df["game_number"], y=form_df["win"].expanding().mean(), mode="lines+markers",
+                name="Win % so far", line=dict(color=COLORS["accent"], width=2),
+                customdata=form_df[["game_date", "opponent"]].assign(
+                    game_date=form_df["game_date"].dt.strftime("%b %d")
+                ).to_numpy(),
+                hovertemplate=hover,
+            )
+
+        # Season average as a flat reference line -- the trend line below
+        # shows direction, this shows the overall level.
+        x_range = [form_df["game_number"].min(), form_df["game_number"].max()]
+        fig.add_scatter(
+            x=x_range, y=[season_avg, season_avg], mode="lines",
+            name=f"Season average ({season_avg:.0%})", hoverinfo="skip",
+            line=dict(color=COLORS["text_muted"], dash="dot", width=1),
         )
-        fig = px.line(
-            team_form_display, x="game_date", y="actual_win_pct_last_10",
-            labels={"game_date": "Date", "actual_win_pct_last_10": "Win %"},
-            markers=True,
-        )
-        fig.update_yaxes(range=[0, 1])
+
+        # Linear trend line: least-squares fit of 10-game win % against game
+        # number (not date, so schedule breaks don't count as time passing).
+        if len(form_df) >= MIN_GAMES_FOR_TREND:
+            slope, intercept = np.polyfit(full["game_number"], full["form"], 1)
+            trend = (slope * full["game_number"] + intercept).clip(0, 1)
+            fig.add_scatter(
+                x=full["game_number"], y=trend, mode="lines", name="Trend", hoverinfo="skip",
+                line=dict(color="#f59e0b", dash="dash", width=2),
+            )
+            start, end = trend.iloc[0], trend.iloc[-1]
+            if abs(end - start) * 100 < TREND_FLAT_POINTS:
+                trend_note = (
+                    f"Trend: roughly flat -- form held around {season_avg:.0%} "
+                    f"(trend line {start:.0%} to {end:.0%})."
+                )
+            else:
+                direction = "up" if slope > 0 else "down"
+                trend_note = (
+                    f"Trend: {direction} about {abs(slope) * 10 * 100:.1f} percentage points "
+                    f"per 10 games ({start:.0%} to {end:.0%})."
+                )
+        elif full.empty:
+            trend_note = (
+                f"The {FORM_WINDOW}-game line starts at game {FORM_WINDOW}, and the trend line "
+                f"once the team has played {MIN_GAMES_FOR_TREND} games."
+            )
+        else:
+            trend_note = f"A trend line appears once the team has played {MIN_GAMES_FOR_TREND} games."
+
+        fig.update_xaxes(title="Game #")
+        fig.update_yaxes(title="Win %", range=[0, 1], tickformat=".0%")
+        fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0))
         st.plotly_chart(style_chart(fig), width="stretch")
+        st.caption(trend_note)
 
     with st.container(border=True):
-        section_label("Recent games")
-        recent = team_form.sort_values("game_date", ascending=False).head(10)
-        recent_display = recent[["game_date", "opponent", "is_home", "goals_for", "goals_against", "win"]].copy()
-        recent_display["is_home"] = recent_display["is_home"].map({1: "Home", 0: "Away"})
-        recent_display["win"] = recent_display["win"].map({1: "W", 0: "L"})
+        recent = team_results(games, team).head(10)
+        section_label(f"Last 10 games ({record_text(recent)})")
         st.dataframe(
-            recent_display,
+            recent[["game_date", "opponent", "home_away", "result"]]
+            .style.map(result_style, subset=["result"]),
             column_config={
                 "game_date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
-                "opponent": "Opponent", "is_home": "Venue",
-                "goals_for": "GF", "goals_against": "GA", "win": "Result",
+                "opponent": "Opponent", "home_away": "Home/Away",
+                "result": f"Result ({team}-opp)",
             },
             hide_index=True,
             width="stretch",

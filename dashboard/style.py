@@ -34,6 +34,9 @@ COLORS = {
 FONT_FAMILY = "'Inter', -apple-system, 'Segoe UI', sans-serif"
 MONO_FAMILY = "'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace"
 
+# Game result colors: win, regulation loss, overtime/shootout loss.
+RESULT_COLORS = {"W": COLORS["positive"], "L": COLORS["negative"], "OT": "#f59e0b"}
+
 # A restrained, muted palette for multi-series charts -- no neon.
 CHART_COLORWAY = ["#3b82f6", "#22c55e", "#f59e0b", "#a78bfa", "#ef4444", "#14b8a6"]
 
@@ -161,6 +164,16 @@ div[data-testid="stSelectbox"] svg {{
     padding: 6px 4px;
 }}
 
+/* Home page artwork: centered, and no taller than what's left of the
+   window under the title, so the page never needs scrolling. */
+.st-key-home_hero {{
+    align-items: center;
+}}
+.st-key-home_hero img {{
+    max-height: calc(100vh - 260px);
+    width: auto !important;
+}}
+
 /* Sidebar */
 section[data-testid="stSidebar"] {{
     background: {COLORS["panel"]};
@@ -190,6 +203,12 @@ def apply_theme() -> None:
 def section_label(text: str) -> None:
     """A small uppercase label introducing a card/section, e.g. 'SEASON SNAPSHOT'."""
     st.markdown(f'<div class="eyebrow">{text}</div>', unsafe_allow_html=True)
+
+
+def result_style(result: str) -> str:
+    """Cell style for a game result like "W 3-2": colored by W/L/OT, bold.
+    Use with DataFrame.style.map(result_style, subset=["result"])."""
+    return f"color: {RESULT_COLORS[result.split()[0]]}; font-weight: 700"
 
 
 def style_chart(fig):

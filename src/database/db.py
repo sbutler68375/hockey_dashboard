@@ -30,11 +30,25 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
+# Columns added to existing tables after they were first created. schema.sql
+# only creates missing tables (CREATE TABLE IF NOT EXISTS), so a database
+# built before a column existed gets it added here instead.
+ADDED_COLUMNS = [
+    ("games", "last_period_type", "TEXT"),
+]
+
+
 def init_db() -> None:
-    """Create all tables/indexes from schema.sql if they don't already exist."""
+    """Create all tables/indexes from schema.sql if they don't already exist,
+    and add any columns in ADDED_COLUMNS that an older database is missing."""
     schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
     with get_connection() as conn:
         conn.executescript(schema_sql)
+        for table, column, column_type in ADDED_COLUMNS:
+            existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+            if column not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+                logger.info("Added column %s.%s", table, column)
     logger.info("Database schema ready at %s", DB_PATH)
 
 

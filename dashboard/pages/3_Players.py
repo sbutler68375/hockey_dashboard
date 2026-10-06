@@ -8,7 +8,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from dashboard.data import load_player_stats, page_header, team_selectbox
+from dashboard.data import load_player_stats, page_header, selected_team
 from dashboard.images import player_headshot_url
 from dashboard.style import apply_theme, section_label, style_chart
 
@@ -47,17 +47,13 @@ season = page_header("Player Stats")
 
 with st.container(border=True):
     section_label("Filters")
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         player_type = st.radio(
             "Player type", ["skater", "goalie"], horizontal=True,
             format_func=lambda t: f"{t.capitalize()}s",
         )
     with col2:
-        team_filter = team_selectbox(
-            "Team", key="players_page_team", help="Show players from one team only.",
-        )
-    with col3:
         sort_options = SORT_STATS[player_type]
         sort_col = st.selectbox(
             "Sort by", list(sort_options), format_func=sort_options.get,
@@ -72,6 +68,7 @@ if players.empty:
     st.info("No player data yet -- go to Home and click 'Refresh all data'.")
     st.stop()
 
+team_filter = selected_team()
 if team_filter is not None:
     players = players[players["team_abbrev"] == team_filter]
 

@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS games (
     away_score INTEGER,
     home_team TEXT NOT NULL,
     home_score INTEGER,
+    last_period_type TEXT,  -- how a finished game ended: 'REG', 'OT' or 'SO'
     FOREIGN KEY (away_team) REFERENCES teams(team_abbrev),
     FOREIGN KEY (home_team) REFERENCES teams(team_abbrev)
 );

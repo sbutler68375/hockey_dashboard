@@ -28,6 +28,9 @@ different values depending on game_type -- preseason games (game_type
 1) report game_state "FINAL", while regular season (2) and playoff (3)
 games report "OFF". Both mean "completed". Anything that filters for
 finished games later must check for both values, not just one.
+
+last_period_type ('REG', 'OT' or 'SO') says whether a finished game was
+decided in regulation, overtime or a shootout -- empty for unplayed games.
 """
 
 import sys
@@ -60,6 +63,7 @@ GAME_COLUMNS = {
     "awayTeam.score": "away_score",
     "homeTeam.abbrev": "home_team",
     "homeTeam.score": "home_score",
+    "gameOutcome.lastPeriodType": "last_period_type",
 }
 
 

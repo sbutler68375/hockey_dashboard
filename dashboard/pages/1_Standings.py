@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from dashboard.data import load_standings, page_header
 from dashboard.images import team_logo_url
-from dashboard.style import apply_theme, section_label
+from dashboard.style import COLORS, apply_theme, section_label
 
 st.set_page_config(page_title="Standings", page_icon="🏒", layout="wide")
 apply_theme()
@@ -23,10 +23,16 @@ if standings.empty:
 
 standings = standings.copy()
 standings["logo"] = standings["team_abbrev"].apply(team_logo_url)
+# One "Streak" column like "2W" / "3L" instead of separate code and count.
+# Overtime losses (NHL code "OT") are shown as losses.
+standings["streak"] = [
+    f"{int(count)}{'L' if code == 'OT' else code}" if pd.notna(code) and pd.notna(count) else ""
+    for code, count in zip(standings["streak_code"], standings["streak_count"])
+]
 
 display_cols = [
     "logo", "team_abbrev", "wins", "losses", "ot_losses", "points", "point_pctg",
-    "goal_for", "goal_against", "goal_differential", "streak_code", "streak_count",
+    "goal_for", "goal_against", "goal_differential", "streak",
 ]
 display_cols = [c for c in display_cols if c in standings.columns]
 column_config = {
@@ -34,7 +40,15 @@ column_config = {
     "team_abbrev": "Team", "wins": "W", "losses": "L", "ot_losses": "OTL",
     "points": "PTS", "point_pctg": st.column_config.NumberColumn("PT%", format="%.3f"),
     "goal_for": "GF", "goal_against": "GA", "goal_differential": "DIFF",
-    "streak_code": "Streak", "streak_count": "#",
+    "streak": "Streak",
+}
+
+# Points decide the standings, so that column is highlighted: accent-colored
+# bold numbers on a faint accent-tinted background.
+POINTS_STYLE = {
+    "color": COLORS["accent"],
+    "font-weight": "700",
+    "background-color": "rgba(59, 130, 246, 0.14)",
 }
 
 
@@ -45,7 +59,7 @@ def show_table(df: pd.DataFrame, title: str | None = None) -> None:
         if title:
             section_label(title)
         st.dataframe(
-            df[display_cols],
+            df[display_cols].style.set_properties(subset=["points"], **POINTS_STYLE),
             column_config=column_config,
             hide_index=True,
             width="stretch",
