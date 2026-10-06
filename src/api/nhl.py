@@ -22,6 +22,19 @@ def get_standings_now() -> list[dict[str, Any]]:
     return data.get("standings", [])
 
 
+def get_standings_on(date: str) -> list[dict[str, Any]]:
+    """Return league standings as of one date (YYYY-MM-DD), one entry per team."""
+    data = get_json(f"{NHL_API_BASE}/standings/{date}")
+    return data.get("standings", [])
+
+
+def get_season_standings_end_dates() -> dict[str, str]:
+    """Return {season id: last date standings were recorded} for every season,
+    e.g. {"20252026": "2026-04-17"} -- used to fetch a past season's final standings."""
+    data = get_json(f"{NHL_API_BASE}/standings-season")
+    return {str(s["id"]): s["standingsEnd"] for s in data.get("seasons", [])}
+
+
 def get_team_roster(team_abbrev: str) -> dict[str, list[dict[str, Any]]]:
     """Return a team's *current* roster, split into forwards/defensemen/goalies.
 

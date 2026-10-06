@@ -18,11 +18,18 @@ TEAM_ABBREVIATIONS = [
     "STL", "TBL", "TOR", "UTA", "VAN", "VGK", "WPG", "WSH",
 ]
 
-# Most recently *completed* NHL season at time of writing (verified
-# 2026-08-26). The 2026-27 season had not started yet, so this is the
-# newest season with a full set of final results. Update this once the
-# new season is underway and you want current-season data instead.
-DEFAULT_SEASON = "20252026"
+# The season in progress -- what the dashboard shows by default. Bump
+# this (and append the old value to HISTORICAL_SEASONS) each fall once
+# the new season's regular season is underway.
+CURRENT_SEASON = "20262027"
+
+# Completed seasons that are still collected: their games serve as model
+# training history, and the dashboard's season toggle can switch to them
+# (final standings, team totals, player stats, game results).
+HISTORICAL_SEASONS = ["20252026"]
+
+# Every season that gets collected (historical + current), oldest first.
+COLLECTED_SEASONS = [*HISTORICAL_SEASONS, CURRENT_SEASON]
 
 # NHL API gameType codes, as seen in schedule/club-schedule-season responses.
 GAME_TYPE_PRESEASON = 1

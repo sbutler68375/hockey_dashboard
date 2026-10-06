@@ -1,7 +1,11 @@
 """Collect player-level season stats, enriched with bio info where possible.
 
-Produces:
-    data/raw/player_stats.csv
+Produces, per season:
+    data/raw/player_stats_<season>.csv
+
+Historical seasons are only fetched once (they're complete and never
+change) -- see src/utils/raw_data.py. Each refresh re-fetches the
+current season only.
 
 Run from the project root:
     venv\\Scripts\\python.exe collectors\\collect_players.py
@@ -9,7 +13,7 @@ Run from the project root:
 Important timing caveat (documented, not silently papered over): a
 player's season stats (club-stats) and a team's *current* roster
 (roster/current) are two different snapshots in time. A player who was
-traded, waived, or retired since DEFAULT_SEASON ended won't appear on
+traded, waived, or retired since that season won't appear on
 their old team's current roster anymore, so bio fields (birth date,
 height, shoots/catches, etc.) for that player will be missing (NaN)
 in the output. Stats themselves are unaffected -- they come entirely
@@ -28,12 +32,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.api.client import NHLApiError
 from src.api.nhl import get_team_roster, get_team_stats
-from src.utils.constants import DEFAULT_SEASON, GAME_TYPE_REGULAR_SEASON, TEAM_ABBREVIATIONS
+from src.utils.constants import CURRENT_SEASON, GAME_TYPE_REGULAR_SEASON, TEAM_ABBREVIATIONS
 from src.utils.logging_config import get_logger
+from src.utils.raw_data import save_season_csv, seasons_to_collect
 
 logger = get_logger(__name__)
 
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
 REQUEST_DELAY_SECONDS = 0.2
 
 BIO_COLUMNS = [
@@ -93,7 +97,7 @@ def _team_player_stats(team_abbrev: str, season: str) -> pd.DataFrame:
     return merged
 
 
-def collect_player_stats(season: str = DEFAULT_SEASON) -> pd.DataFrame:
+def collect_player_stats(season: str = CURRENT_SEASON) -> pd.DataFrame:
     """Fetch and combine player season stats for every team."""
     frames = []
     for i, team in enumerate(TEAM_ABBREVIATIONS, start=1):
@@ -115,12 +119,8 @@ def collect_player_stats(season: str = DEFAULT_SEASON) -> pd.DataFrame:
 
 
 def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    df = collect_player_stats()
-    output_path = OUTPUT_DIR / "player_stats.csv"
-    df.to_csv(output_path, index=False)
-    logger.info("Saved %s (%d rows)", output_path, len(df))
+    for season in seasons_to_collect("player_stats"):
+        save_season_csv(collect_player_stats(season), "player_stats", season)
 
 
 if __name__ == "__main__":

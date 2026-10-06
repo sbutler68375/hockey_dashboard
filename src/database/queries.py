@@ -26,15 +26,21 @@ def get_team_games(team_abbrev: str, season: int | None = None) -> pd.DataFrame:
         return pd.read_sql_query(query, conn, params=params)
 
 
-def get_standings(date: str | None = None) -> pd.DataFrame:
+def get_standings(date: str | None = None, season: int | None = None) -> pd.DataFrame:
     """Return standings, optionally filtered to one snapshot date, joined
     with conference/division from teams (standings itself doesn't carry those).
 
-    If no date is given, returns the most recent snapshot available.
+    If no date is given, returns the most recent snapshot available --
+    within `season` if one is given (e.g. a past season's final standings).
     """
     with get_connection() as conn:
         if date is None:
-            date_row = conn.execute("SELECT MAX(date) FROM standings").fetchone()
+            if season is None:
+                date_row = conn.execute("SELECT MAX(date) FROM standings").fetchone()
+            else:
+                date_row = conn.execute(
+                    "SELECT MAX(date) FROM standings WHERE season_id = ?", [season]
+                ).fetchone()
             date = date_row[0] if date_row else None
         query = """
             SELECT s.*, t.conference_name, t.division_name
@@ -44,6 +50,12 @@ def get_standings(date: str | None = None) -> pd.DataFrame:
             ORDER BY s.points DESC
         """
         return pd.read_sql_query(query, conn, params=[date])
+
+
+def get_teams() -> pd.DataFrame:
+    """Return the teams dimension table (abbreviation, names, conference, division)."""
+    with get_connection() as conn:
+        return pd.read_sql_query("SELECT * FROM teams ORDER BY team_abbrev", conn)
 
 
 def get_player_stats(season: int, player_type: str | None = None) -> pd.DataFrame:
@@ -66,7 +78,7 @@ def get_team_season_stats(season: int) -> pd.DataFrame:
         )
 
 
-def get_completed_games(game_type: int | None = 2) -> pd.DataFrame:
+def get_completed_games(game_type: int | None = 2, season: int | None = None) -> pd.DataFrame:
     """Return finished games, ordered chronologically.
 
     Completed games use game_state "OFF" (regular season/playoffs) or
@@ -77,12 +89,17 @@ def get_completed_games(game_type: int | None = 2) -> pd.DataFrame:
         game_type: NHL gameType code to filter to (2 = regular season,
             the default and the only type currently used for feature
             engineering). Pass None to include all game types.
+        season: limit to one season (e.g. 20262027). None (the default)
+            returns every collected season -- what model training wants.
     """
     query = "SELECT * FROM games WHERE game_state IN ('OFF', 'FINAL')"
     params: list = []
     if game_type is not None:
         query += " AND game_type = ?"
         params.append(game_type)
+    if season is not None:
+        query += " AND season = ?"
+        params.append(season)
     query += " ORDER BY game_date ASC"
 
     with get_connection() as conn:

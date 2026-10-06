@@ -1,4 +1,5 @@
-"""Load collected CSVs (data/raw/*.csv) into the SQLite database.
+"""Load collected per-season CSVs (data/raw/<dataset>_<season>.csv) into
+the SQLite database.
 
 Column renames below map the NHL API's raw field names (as they land
 in our CSVs via pd.json_normalize) to the schema's snake_case columns.
@@ -6,30 +7,19 @@ Every source column name here was verified against real CSV output
 (see collectors/), not guessed.
 """
 
-from pathlib import Path
-
-import pandas as pd
-
 from src.database.db import get_connection, upsert_dataframe
 from src.utils.logging_config import get_logger
+from src.utils.raw_data import read_all_seasons
 
 logger = get_logger(__name__)
 
-RAW_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "raw"
-
-
-def _read_raw(filename: str) -> pd.DataFrame:
-    path = RAW_DIR / filename
-    if not path.exists():
-        raise FileNotFoundError(
-            f"{path} not found -- run the matching collector in collectors/ first."
-        )
-    return pd.read_csv(path)
-
 
 def load_teams() -> int:
-    """Derive the teams dimension table from standings.csv (one row/team)."""
-    df = _read_raw("standings.csv")
+    """Derive the teams dimension table from the standings files (one row/team).
+
+    Files are stacked oldest season first, so keep="last" takes each team's
+    names/division from the current season if they've changed."""
+    df = read_all_seasons("standings")
     rename = {
         "teamAbbrev.default": "team_abbrev",
         "teamName.default": "team_name",
@@ -38,15 +28,15 @@ def load_teams() -> int:
         "conferenceName": "conference_name",
         "divisionName": "division_name",
     }
-    teams = df.rename(columns=rename)[list(rename.values())].drop_duplicates(subset="team_abbrev")
+    teams = df.rename(columns=rename)[list(rename.values())].drop_duplicates(subset="team_abbrev", keep="last")
 
     with get_connection() as conn:
         return upsert_dataframe(conn, "teams", teams, pk_columns=["team_abbrev"])
 
 
 def load_standings() -> int:
-    """Load standings.csv into the standings table."""
-    df = _read_raw("standings.csv")
+    """Load the standings files into the standings table."""
+    df = read_all_seasons("standings")
     rename = {
         "teamAbbrev.default": "team_abbrev",
         "date": "date",
@@ -83,22 +73,22 @@ def load_standings() -> int:
 
 
 def load_team_season_stats() -> int:
-    """Load team_stats.csv into the team_season_stats table."""
-    df = _read_raw("team_stats.csv")  # already snake_case, matches schema directly
+    """Load the team_stats files into the team_season_stats table."""
+    df = read_all_seasons("team_stats")  # already snake_case, matches schema directly
     with get_connection() as conn:
         return upsert_dataframe(conn, "team_season_stats", df, pk_columns=["team_abbrev", "season"])
 
 
 def load_games() -> int:
-    """Load games.csv into the games table."""
-    df = _read_raw("games.csv")  # already snake_case, matches schema directly
+    """Load the games files into the games table."""
+    df = read_all_seasons("games")  # already snake_case, matches schema directly
     with get_connection() as conn:
         return upsert_dataframe(conn, "games", df, pk_columns=["game_id"])
 
 
 def load_players() -> int:
-    """Load player_stats.csv into the players table."""
-    df = _read_raw("player_stats.csv")
+    """Load the player_stats files into the players table."""
+    df = read_all_seasons("player_stats")
     rename = {
         "playerId": "player_id",
         "team_abbrev": "team_abbrev",
@@ -142,7 +132,7 @@ def load_players() -> int:
     available = {k: v for k, v in rename.items() if k in df.columns}
     missing = set(rename) - set(available)
     if missing:
-        logger.warning("player_stats.csv missing expected columns: %s", missing)
+        logger.warning("player_stats files missing expected columns: %s", missing)
 
     players = df.rename(columns=available)[list(available.values())]
 

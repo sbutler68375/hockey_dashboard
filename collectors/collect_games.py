@@ -1,7 +1,13 @@
-"""Collect a full season's worth of games (played and upcoming).
+"""Collect games (played and upcoming) for every season in COLLECTED_SEASONS.
 
-Produces:
-    data/raw/games.csv
+Historical seasons double as model training history.
+
+Produces, per season:
+    data/raw/games_<season>.csv
+
+Historical seasons are only fetched once (they're complete and never
+change) -- see src/utils/raw_data.py. Each refresh re-fetches the
+current season only.
 
 Run from the project root:
     venv\\Scripts\\python.exe collectors\\collect_games.py
@@ -34,12 +40,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.api.client import NHLApiError
 from src.api.nhl import get_team_season_schedule
-from src.utils.constants import DEFAULT_SEASON, TEAM_ABBREVIATIONS
+from src.utils.constants import CURRENT_SEASON, TEAM_ABBREVIATIONS
 from src.utils.logging_config import get_logger
+from src.utils.raw_data import save_season_csv, seasons_to_collect
 
 logger = get_logger(__name__)
 
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
 REQUEST_DELAY_SECONDS = 0.2
 
 GAME_COLUMNS = {
@@ -57,7 +63,7 @@ GAME_COLUMNS = {
 }
 
 
-def collect_games(season: str = DEFAULT_SEASON) -> pd.DataFrame:
+def collect_games(season: str = CURRENT_SEASON) -> pd.DataFrame:
     """Fetch every team's season schedule and dedupe into one games table."""
     frames = []
     for i, team in enumerate(TEAM_ABBREVIATIONS, start=1):
@@ -105,12 +111,9 @@ def collect_games(season: str = DEFAULT_SEASON) -> pd.DataFrame:
 
 
 def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    df = collect_games()
-    output_path = OUTPUT_DIR / "games.csv"
-    df.to_csv(output_path, index=False)
-    logger.info("Saved %s (%d rows)", output_path, len(df))
+    for season in seasons_to_collect("games"):
+        logger.info("Collecting games for season %s...", season)
+        save_season_csv(collect_games(season), "games", season)
 
 
 if __name__ == "__main__":

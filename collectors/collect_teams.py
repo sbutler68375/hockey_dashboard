@@ -1,13 +1,18 @@
-"""Collect team-level data: current standings and per-team season totals.
+"""Collect team-level data: standings and per-team season totals.
 
-Produces:
-    data/raw/standings.csv   -- one row per team, current/final standings
-    data/raw/team_stats.csv  -- one row per team, aggregated skater/goalie totals
+Produces, per season:
+    data/raw/standings_<season>.csv   -- one row per team: today's standings for the
+                                         current season, final standings for a past one
+    data/raw/team_stats_<season>.csv  -- one row per team, aggregated skater/goalie totals
+
+Historical seasons are only fetched once (they're complete and never
+change) -- see src/utils/raw_data.py. Each refresh re-fetches the
+current season only.
 
 Run from the project root:
     venv\\Scripts\\python.exe collectors\\collect_teams.py
 
-Note on team_stats.csv: the NHL's club-stats endpoint returns per-player
+Note on team_stats: the NHL's club-stats endpoint returns per-player
 totals, not team-level special-teams data, so true power-play% and
 penalty-kill% (opportunities, not just goals) are NOT available from
 this endpoint. This collector aggregates what IS available (goals,
@@ -26,22 +31,36 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.api.client import NHLApiError
-from src.api.nhl import get_standings_now, get_team_stats
-from src.utils.constants import DEFAULT_SEASON, GAME_TYPE_REGULAR_SEASON, TEAM_ABBREVIATIONS
+from src.api.nhl import (
+    get_season_standings_end_dates,
+    get_standings_now,
+    get_standings_on,
+    get_team_stats,
+)
+from src.utils.constants import CURRENT_SEASON, GAME_TYPE_REGULAR_SEASON, TEAM_ABBREVIATIONS
 from src.utils.logging_config import get_logger
+from src.utils.raw_data import save_season_csv, seasons_to_collect
 
 logger = get_logger(__name__)
 
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
 REQUEST_DELAY_SECONDS = 0.2  # be polite to an unofficial, unauthenticated API
 
 
-def collect_standings() -> pd.DataFrame:
-    """Fetch current standings and flatten into a DataFrame."""
-    logger.info("Fetching current standings...")
-    standings = get_standings_now()
+def collect_standings(season: str = CURRENT_SEASON) -> pd.DataFrame:
+    """Fetch one season's standings, flattened into a DataFrame (one row per
+    team): today's standings for the current season, final standings for a
+    completed one."""
+    if season == CURRENT_SEASON:
+        logger.info("Fetching current standings...")
+        standings = get_standings_now()
+    else:
+        end_date = get_season_standings_end_dates().get(season)
+        if end_date is None:
+            raise ValueError(f"No standings end date listed for season {season}.")
+        logger.info("Fetching final standings for %s (as of %s)...", season, end_date)
+        standings = get_standings_on(end_date)
     if not standings:
-        raise ValueError("Standings response was empty -- API may have changed.")
+        raise ValueError(f"Standings response for {season} was empty -- API may have changed.")
     df = pd.json_normalize(standings)
     logger.info("Got standings for %d teams.", len(df))
     return df
@@ -81,7 +100,7 @@ def _aggregate_team_stats(team_abbrev: str, season: str) -> dict:
     return row
 
 
-def collect_team_stats(season: str = DEFAULT_SEASON) -> pd.DataFrame:
+def collect_team_stats(season: str = CURRENT_SEASON) -> pd.DataFrame:
     """Fetch and aggregate season stat totals for every team."""
     rows = []
     for i, team in enumerate(TEAM_ABBREVIATIONS, start=1):
@@ -101,17 +120,11 @@ def collect_team_stats(season: str = DEFAULT_SEASON) -> pd.DataFrame:
 
 
 def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    for season in seasons_to_collect("standings"):
+        save_season_csv(collect_standings(season), "standings", season)
 
-    standings_df = collect_standings()
-    standings_path = OUTPUT_DIR / "standings.csv"
-    standings_df.to_csv(standings_path, index=False)
-    logger.info("Saved %s (%d rows)", standings_path, len(standings_df))
-
-    team_stats_df = collect_team_stats()
-    team_stats_path = OUTPUT_DIR / "team_stats.csv"
-    team_stats_df.to_csv(team_stats_path, index=False)
-    logger.info("Saved %s (%d rows)", team_stats_path, len(team_stats_df))
+    for season in seasons_to_collect("team_stats"):
+        save_season_csv(collect_team_stats(season), "team_stats", season)
 
 
 if __name__ == "__main__":

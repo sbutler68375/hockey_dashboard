@@ -3,59 +3,82 @@
 import sys
 from pathlib import Path
 
-import plotly.express as px
+import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from dashboard.data import load_standings
+from dashboard.data import load_standings, page_header
+from dashboard.images import team_logo_url
+from dashboard.style import apply_theme, section_label
 
 st.set_page_config(page_title="Standings", page_icon="🏒", layout="wide")
-st.title("Standings")
+apply_theme()
+season = page_header("Standings")
 
-standings = load_standings()
+standings = load_standings(season)
 if standings.empty:
     st.info("No standings data yet -- go to Home and click 'Refresh all data'.")
     st.stop()
 
-conf_col, div_col = st.columns(2)
-conferences = ["All"] + sorted(standings["conference_name"].dropna().unique().tolist()) if "conference_name" in standings else ["All"]
-divisions = ["All"] + sorted(standings["division_name"].dropna().unique().tolist()) if "division_name" in standings else ["All"]
-
-with conf_col:
-    conference = st.selectbox("Conference", conferences)
-with div_col:
-    division = st.selectbox("Division", divisions)
-
-filtered = standings.copy()
-if conference != "All":
-    filtered = filtered[filtered["conference_name"] == conference]
-if division != "All":
-    filtered = filtered[filtered["division_name"] == division]
-
-filtered = filtered.sort_values("points", ascending=False)
+standings = standings.copy()
+standings["logo"] = standings["team_abbrev"].apply(team_logo_url)
 
 display_cols = [
-    "team_abbrev", "wins", "losses", "ot_losses", "points", "point_pctg",
+    "logo", "team_abbrev", "wins", "losses", "ot_losses", "points", "point_pctg",
     "goal_for", "goal_against", "goal_differential", "streak_code", "streak_count",
 ]
-display_cols = [c for c in display_cols if c in filtered.columns]
+display_cols = [c for c in display_cols if c in standings.columns]
+column_config = {
+    "logo": st.column_config.ImageColumn(""),
+    "team_abbrev": "Team", "wins": "W", "losses": "L", "ot_losses": "OTL",
+    "points": "PTS", "point_pctg": st.column_config.NumberColumn("PT%", format="%.3f"),
+    "goal_for": "GF", "goal_against": "GA", "goal_differential": "DIFF",
+    "streak_code": "Streak", "streak_count": "#",
+}
 
-st.dataframe(
-    filtered[display_cols],
-    column_config={
-        "team_abbrev": "Team", "wins": "W", "losses": "L", "ot_losses": "OTL",
-        "points": "PTS", "point_pctg": st.column_config.NumberColumn("PT%", format="%.3f"),
-        "goal_for": "GF", "goal_against": "GA", "goal_differential": "DIFF",
-        "streak_code": "Streak", "streak_count": "#",
-    },
-    hide_index=True,
-    use_container_width=True,
-)
 
-st.subheader("Points by team")
-fig = px.bar(
-    filtered.sort_values("points"), x="points", y="team_abbrev", orientation="h",
-    labels={"points": "Points", "team_abbrev": "Team"}, height=max(400, len(filtered) * 22),
-)
-st.plotly_chart(fig, use_container_width=True)
+def show_table(df: pd.DataFrame, title: str | None = None) -> None:
+    """Render one table as a card, full height, no inner scrollbar."""
+    df = df.sort_values("points", ascending=False)
+    with st.container(border=True):
+        if title:
+            section_label(title)
+        st.dataframe(
+            df[display_cols],
+            column_config=column_config,
+            hide_index=True,
+            width="stretch",
+            height=35 * (len(df) + 1) + 3,
+        )
+
+
+if "standings_view" not in st.session_state:
+    st.session_state["standings_view"] = "All"
+
+view = st.session_state["standings_view"]
+
+btn_all, btn_conf, btn_div = st.columns(3)
+if btn_all.button("All", width="stretch", type="primary" if view == "All" else "secondary"):
+    st.session_state["standings_view"] = "All"
+    st.rerun()
+if btn_conf.button("Conferences", width="stretch", type="primary" if view == "Conferences" else "secondary"):
+    st.session_state["standings_view"] = "Conferences"
+    st.rerun()
+if btn_div.button("Divisions", width="stretch", type="primary" if view == "Divisions" else "secondary"):
+    st.session_state["standings_view"] = "Divisions"
+    st.rerun()
+
+st.write("")
+
+if view == "All":
+    show_table(standings)
+elif view == "Conferences":
+    for conference in sorted(standings["conference_name"].dropna().unique()):
+        show_table(standings[standings["conference_name"] == conference], title=conference)
+else:
+    for conference in sorted(standings["conference_name"].dropna().unique()):
+        st.subheader(conference)
+        conf_standings = standings[standings["conference_name"] == conference]
+        for division in sorted(conf_standings["division_name"].dropna().unique()):
+            show_table(conf_standings[conf_standings["division_name"] == division], title=division)

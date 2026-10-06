@@ -22,8 +22,6 @@ is documented in place rather than hidden, including in this README.
   with data leakage prevention as a first-class design constraint, not an afterthought
 - **Trains and compares** Logistic Regression, Random Forest, and XGBoost against a
   majority-class baseline, using a time-aware (chronological) train/val/test split
-- **Predicts** matchup win probabilities via a small CLI and a dashboard page, both of
-  which show their work (the exact feature vector used) rather than a bare number
 - **Visualizes** standings, team form trends, player leaderboards, and game history in a
   multi-page Streamlit + Plotly dashboard
 
@@ -31,14 +29,12 @@ is documented in place rather than hidden, including in this README.
 
 ```mermaid
 flowchart LR
-    A[NHL Public API] -->|collectors/*.py| B[data/raw/*.csv]
+    A[NHL Public API] -->|collectors/*.py| B[data/raw/*_season.csv]
     B -->|scripts/build_database.py| C[(SQLite\nnhl_database.db)]
     C -->|scripts/generate_features.py| D[data/processed/features.csv]
     D -->|scripts/train_models.py| E[models/*.joblib]
     C --> F[Streamlit Dashboard]
     E --> F
-    D -.->|scripts/predict_game.py| G[CLI prediction]
-    E -.-> G
 ```
 
 Each stage is a separate, independently-runnable script — the pipeline is meant to be
@@ -61,11 +57,11 @@ everything here runs entirely locally for free.
 ## Project structure
 
 ```
-collectors/          NHL API -> data/raw/*.csv (one script per data type)
+collectors/          NHL API -> data/raw/<dataset>_<season>.csv (one script per data type)
 src/api/              HTTP client + endpoint wrappers for the NHL API
 src/database/         SQLite schema, import/upsert logic, queries, validation
 src/features/         Leakage-safe rolling feature engineering
-src/models/           Dataset prep, time-aware split, training, evaluation, prediction
+src/models/           Dataset prep, time-aware split, training, evaluation
 scripts/              Runnable entrypoints that tie src/ modules together
 dashboard/            Streamlit multi-page app
 tests/                pytest suite
@@ -93,7 +89,8 @@ No `.env` file or API key is needed — the NHL's public API requires no authent
 Run these in order. Each is idempotent — rerunning any step is always safe.
 
 ```
-# 1. Pull fresh data from the NHL API into data/raw/*.csv
+# 1. Pull fresh data from the NHL API into data/raw/<dataset>_<season>.csv
+#    (past seasons are fetched once and then skipped; delete a file to re-fetch it)
 venv\Scripts\python.exe collectors\collect_teams.py
 venv\Scripts\python.exe collectors\collect_players.py
 venv\Scripts\python.exe collectors\collect_games.py
@@ -113,19 +110,13 @@ venv\Scripts\python.exe -m streamlit run dashboard\Home.py
 
 The dashboard also has a "Refresh all data" button that reruns steps 1-3 for you.
 
-### Predicting a matchup from the command line
-
-```
-venv\Scripts\python.exe scripts\predict_game.py --home TOR --away MTL --date 2026-04-20
-```
-
 ## Testing
 
 ```
 venv\Scripts\python.exe -m pytest tests\ -v
 ```
 
-17 tests covering: database upsert idempotency and foreign key enforcement, the
+15 tests covering: database upsert idempotency and foreign key enforcement, the
 leakage-safe rolling feature logic (including the offseason season-boundary edge case),
 the time-aware split, and the prediction baseline's train/eval separation.
 
@@ -139,9 +130,10 @@ silently return bad data.
 
 Known, deliberate scope limitations (not bugs):
 
-- **Only the 2025-26 season is collected.** It's fully complete, so there's no live
-  upcoming schedule loaded — `predict_game.py` and the Predictions page model a
-  *hypothetical* matchup using each team's most recent known form, not a real game.
+- **Two seasons are collected:** the current one (`CURRENT_SEASON` in
+  `src/utils/constants.py`) and last season (`HISTORICAL_SEASONS`), whose games double
+  as model training history. A toggle in the top-right of every dashboard page switches
+  all views between them; past seasons show final standings.
 - **No starting-goalie data.** The NHL's box-score endpoints don't expose which goalie
   started a game without a separate boxscore/gamecenter collector this project doesn't
   build. Team-level rolling goals-against is used as an imperfect proxy.
