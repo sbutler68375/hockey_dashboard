@@ -17,6 +17,7 @@ TABLE_PKS = {
     "team_season_stats": ["team_abbrev", "season"],
     "games": ["game_id"],
     "players": ["player_id", "team_abbrev", "season"],
+    "team_game_special_teams": ["game_id", "team_abbrev"],
 }
 
 

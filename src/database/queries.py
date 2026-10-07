@@ -70,6 +70,16 @@ def get_player_stats(season: int, player_type: str | None = None) -> pd.DataFram
         return pd.read_sql_query(query, conn, params=params)
 
 
+def get_team_special_teams_games(team_abbrev: str, season: int) -> pd.DataFrame:
+    """Return one team's per-game power-play / penalty-kill numbers, oldest first."""
+    with get_connection() as conn:
+        return pd.read_sql_query(
+            "SELECT * FROM team_game_special_teams WHERE team_abbrev = ? AND season = ? "
+            "ORDER BY game_date, game_id",
+            conn, params=[team_abbrev, season],
+        )
+
+
 def get_team_season_stats(season: int) -> pd.DataFrame:
     """Return aggregated team totals for one season."""
     with get_connection() as conn:

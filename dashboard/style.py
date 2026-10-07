@@ -1,46 +1,81 @@
 """Shared visual design system for the dashboard.
 
-Design direction: a dark, restrained "professional analytics product"
-look (closer to a modern data/SaaS dashboard than a hockey video game)
+Design direction: a restrained "professional analytics product"
+look, in a dark and a light theme (closer to a modern data/SaaS dashboard than a hockey video game)
 -- clean cards, a single muted accent color, crisp sans-serif type for
 UI text and a monospace face reserved for numeric data, and small
 transitions rather than glow/animation. Paired with
-.streamlit/config.toml, which sets the base theme colors that
-Streamlit's own widgets, buttons, and dataframes read directly.
+.streamlit/config.toml, whose [theme.dark] / [theme.light] sections set the
+colors Streamlit's own widgets, buttons, and dataframes read directly; the
+palettes below must match them.
 
 Call apply_theme() once per page, right after st.set_page_config().
-Use style_chart(fig) on every Plotly figure so charts share the same
-palette instead of Plotly's default colors. Use section_label(text)
-for the small uppercase heading that introduces a card/section.
+Use colors() for the active theme's palette in page code, and
+style_chart(fig) on every Plotly figure so charts share the same
+palette instead of Plotly's default colors. Wrap each section in
+`with card(name):` and use section_label(text) for the heading that introduces a card/section.
+
+Depth: page background -> section cards (a raised panel, visible border,
+bold heading with an accent bar) -> metric tiles inside a section (inset
+back down to the page color), so sections read as distinct blocks rather
+than one field of numbers.
 """
+
+import re
 
 import streamlit as st
 
-# Exported so page code can reuse the same palette for anything CSS
-# can't reach (e.g. conditional text color in an f-string).
-COLORS = {
-    "bg": "#0a0d12",
-    "panel": "#12161d",
-    "panel_alt": "#171c24",
-    "border": "rgba(255, 255, 255, 0.08)",
-    "border_strong": "rgba(255, 255, 255, 0.16)",
-    "text": "#e6e9ee",
-    "text_muted": "#8892a0",
-    "accent": "#3b82f6",
-    "positive": "#22c55e",
-    "negative": "#ef4444",
+# One palette per theme. Page code reads the active one with colors() for
+# anything CSS can't reach (e.g. a chart line color).
+PALETTES = {
+    "dark": {
+        "bg": "#0a0d12",
+        "panel": "#12161d",
+        "panel_alt": "#171c24",
+        "border": "rgba(255, 255, 255, 0.08)",
+        "border_strong": "rgba(255, 255, 255, 0.16)",
+        "text": "#e6e9ee",
+        "text_muted": "#8892a0",
+        "accent": "#3b82f6",
+        "positive": "#22c55e",
+        "negative": "#ef4444",
+        "warning": "#f59e0b",
+    },
+    "light": {
+        "bg": "#eef1f5",
+        "panel": "#ffffff",
+        "panel_alt": "#ffffff",
+        "border": "rgba(15, 23, 42, 0.10)",
+        "border_strong": "rgba(15, 23, 42, 0.20)",
+        "text": "#111827",
+        "text_muted": "#5b6472",
+        "accent": "#2563eb",
+        "positive": "#16a34a",
+        "negative": "#dc2626",
+        "warning": "#d97706",
+    },
 }
+
+
+def theme_type() -> str:
+    """'light' or 'dark' -- the theme this viewer's browser is showing
+    (dark until the browser has reported one)."""
+    return "light" if st.context.theme.type == "light" else "dark"
+
+
+def colors() -> dict[str, str]:
+    """The active theme's palette."""
+    return PALETTES[theme_type()]
 
 FONT_FAMILY = "'Inter', -apple-system, 'Segoe UI', sans-serif"
 MONO_FAMILY = "'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace"
 
-# Game result colors: win, regulation loss, overtime/shootout loss.
-RESULT_COLORS = {"W": COLORS["positive"], "L": COLORS["negative"], "OT": "#f59e0b"}
-
 # A restrained, muted palette for multi-series charts -- no neon.
 CHART_COLORWAY = ["#3b82f6", "#22c55e", "#f59e0b", "#a78bfa", "#ef4444", "#14b8a6"]
 
-_CSS = f"""
+def _css(c: dict[str, str]) -> str:
+    """The shared stylesheet, filled in with palette c."""
+    return f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
@@ -52,7 +87,7 @@ h1, h2, h3 {{
     font-family: {FONT_FAMILY} !important;
     font-weight: 600 !important;
     letter-spacing: -0.01em;
-    color: {COLORS["text"]};
+    color: {c["text"]};
 }}
 
 h1 {{
@@ -61,52 +96,77 @@ h1 {{
 }}
 
 p, span, label, li {{
-    color: {COLORS["text"]};
+    color: {c["text"]};
 }}
 
-.eyebrow {{
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: {COLORS["text_muted"]};
-    margin-bottom: 0.35rem;
+/* Section heading: bold, full-brightness, with an accent bar so each
+   card's title stands out from the numbers inside it. */
+.section-heading {{
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: {c["text"]};
+    border-left: 3px solid {c["accent"]};
+    padding-left: 0.6rem;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
 }}
 
 /* Metric "cards" */
 div[data-testid="stMetric"] {{
-    background: {COLORS["panel"]};
-    border: 1px solid {COLORS["border"]};
+    background: {c["bg"]};
+    border: 1px solid {c["border"]};
     border-radius: 10px;
     padding: 14px 16px;
     transition: border-color 150ms ease;
 }}
 div[data-testid="stMetric"]:hover {{
-    border-color: {COLORS["border_strong"]};
+    border-color: {c["border_strong"]};
 }}
 div[data-testid="stMetricLabel"] {{
     text-transform: uppercase;
     letter-spacing: 0.06em;
     font-size: 0.7rem !important;
     font-weight: 600;
-    color: {COLORS["text_muted"]} !important;
+    color: {c["text_muted"]} !important;
 }}
 div[data-testid="stMetricValue"] {{
     font-family: {MONO_FAMILY};
     font-weight: 600;
     font-size: 1.75rem !important;
-    color: {COLORS["text"]};
+    color: {c["text"]};
 }}
 div[data-testid="stMetricDelta"] {{
     font-family: {MONO_FAMILY};
     font-weight: 500;
 }}
 
-/* Bordered containers (st.container(border=True)) read as cards */
-div[data-testid="stVerticalBlockBorderWrapper"] {{
+/* Two metrics sharing one card (Team page special teams: last 10 games +
+   season). The keyed container is the card; the metrics inside drop their
+   own card styling, and the season one is smaller. */
+div[class*="st-key-metric_pair_"] {{
+    background: {c["bg"]};
+    border: 1px solid {c["border"]};
+    border-radius: 10px;
+    padding: 14px 16px;
+}}
+div[class*="st-key-metric_pair_"] div[data-testid="stMetric"] {{
+    background: none;
+    border: none;
+    padding: 0;
+}}
+div[class*="st-key-metric_pair_"] div[class*="st-key-metric_secondary_"] div[data-testid="stMetricValue"] {{
+    font-size: 1.25rem !important;
+}}
+
+/* Section cards, created with card() below. Styled by their key class
+   because Streamlit 1.65 bordered containers have no stable selector
+   of their own. */
+div[class*="st-key-card_"] {{
+    border: 1px solid {c["border_strong"]} !important;
     border-radius: 12px !important;
-    border-color: {COLORS["border"]} !important;
-    background: {COLORS["panel"]};
+    background: {c["panel_alt"]};
+    margin-bottom: 0.75rem;
 }}
 
 /* Buttons -- flat, with a small transition; primary/secondary colors
@@ -127,21 +187,21 @@ div[data-testid="stVerticalBlockBorderWrapper"] {{
 div[data-testid="stWidgetLabel"] p {{
     font-size: 0.8rem !important;
     font-weight: 600 !important;
-    color: {COLORS["text"]} !important;
+    color: {c["text"]} !important;
 }}
 div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {{
-    background: {COLORS["panel_alt"]};
+    background: {c["panel_alt"]};
     border: 1px solid rgba(59, 130, 246, 0.55) !important;
     border-radius: 8px;
     cursor: pointer;
     transition: border-color 150ms ease, box-shadow 150ms ease;
 }}
 div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover {{
-    border-color: {COLORS["accent"]} !important;
+    border-color: {c["accent"]} !important;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
 }}
 div[data-testid="stSelectbox"] svg {{
-    color: {COLORS["accent"]};
+    color: {c["accent"]};
 }}
 
 /* Team picker: the header's logo button and the logo grid it opens.
@@ -176,19 +236,19 @@ div[data-testid="stSelectbox"] svg {{
 
 /* Sidebar */
 section[data-testid="stSidebar"] {{
-    background: {COLORS["panel"]};
-    border-right: 1px solid {COLORS["border"]};
+    background: {c["panel"]};
+    border-right: 1px solid {c["border"]};
 }}
 
 /* Dataframes read as cards too */
 div[data-testid="stDataFrame"] {{
-    border: 1px solid {COLORS["border"]};
+    border: 1px solid {c["border"]};
     border-radius: 10px;
     overflow: hidden;
 }}
 
 hr {{
-    border-color: {COLORS["border"]} !important;
+    border-color: {c["border"]} !important;
     margin: 1.4rem 0 !important;
 }}
 </style>
@@ -196,31 +256,42 @@ hr {{
 
 
 def apply_theme() -> None:
-    """Inject the dashboard's shared visual design system into the current page."""
-    st.markdown(_CSS, unsafe_allow_html=True)
+    """Inject the dashboard's shared visual design system (in the active
+    theme's colors) into the current page."""
+    st.markdown(_css(colors()), unsafe_allow_html=True)
+
+
+def card(name: str):
+    """A section card: use as `with card("season_totals"):`. The name must be
+    unique on the page -- it becomes the container key the CSS targets."""
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    return st.container(border=True, key=f"card_{slug}")
 
 
 def section_label(text: str) -> None:
-    """A small uppercase label introducing a card/section, e.g. 'SEASON SNAPSHOT'."""
-    st.markdown(f'<div class="eyebrow">{text}</div>', unsafe_allow_html=True)
+    """The bold heading (with an accent bar) that introduces a card/section."""
+    st.markdown(f'<div class="section-heading">{text}</div>', unsafe_allow_html=True)
 
 
 def result_style(result: str) -> str:
     """Cell style for a game result like "W 3-2": colored by W/L/OT, bold.
     Use with DataFrame.style.map(result_style, subset=["result"])."""
-    return f"color: {RESULT_COLORS[result.split()[0]]}; font-weight: 700"
+    c = colors()
+    result_colors = {"W": c["positive"], "L": c["negative"], "OT": c["warning"]}
+    return f"color: {result_colors[result.split()[0]]}; font-weight: 700"
 
 
 def style_chart(fig):
-    """Apply the shared dark theme + colorway to a Plotly figure."""
+    """Apply the shared theme (active palette) + colorway to a Plotly figure."""
+    c = colors()
     fig.update_layout(
-        paper_bgcolor=COLORS["panel"],
-        plot_bgcolor=COLORS["panel"],
-        font=dict(family=FONT_FAMILY, color=COLORS["text"], size=13),
+        paper_bgcolor="rgba(0,0,0,0)",  # transparent: inherit the section card
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=FONT_FAMILY, color=c["text"], size=13),
         colorway=CHART_COLORWAY,
         margin=dict(l=10, r=10, t=30, b=10),
         legend=dict(bgcolor="rgba(0,0,0,0)"),
     )
-    fig.update_xaxes(gridcolor=COLORS["border"], zerolinecolor=COLORS["border_strong"], linecolor=COLORS["border"])
-    fig.update_yaxes(gridcolor=COLORS["border"], zerolinecolor=COLORS["border_strong"], linecolor=COLORS["border"])
+    fig.update_xaxes(gridcolor=c["border"], zerolinecolor=c["border_strong"], linecolor=c["border"])
+    fig.update_yaxes(gridcolor=c["border"], zerolinecolor=c["border_strong"], linecolor=c["border"])
     return fig

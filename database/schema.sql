@@ -66,8 +66,6 @@ CREATE TABLE IF NOT EXISTS team_season_stats (
     total_shutouts INTEGER,
     power_play_pct REAL,    -- fraction, e.g. 0.21 = 21%
     penalty_kill_pct REAL,
-    power_play_pct_last_10 REAL,    -- same, over the team's last 10 games
-    penalty_kill_pct_last_10 REAL,
     PRIMARY KEY (team_abbrev, season),
     FOREIGN KEY (team_abbrev) REFERENCES teams(team_abbrev)
 );
@@ -139,6 +137,23 @@ CREATE TABLE IF NOT EXISTS players (
     shoots_catches TEXT,
 
     PRIMARY KEY (player_id, team_abbrev, season),
+    FOREIGN KEY (team_abbrev) REFERENCES teams(team_abbrev)
+);
+
+-- One row per team per regular-season game, from the NHL stats API.
+-- Power play % over any stretch = SUM(pp_goals) / SUM(pp_opportunities);
+-- penalty kill % = 1 - SUM(pp_goals_against) / SUM(times_shorthanded).
+CREATE TABLE IF NOT EXISTS team_game_special_teams (
+    game_id INTEGER NOT NULL,
+    team_abbrev TEXT NOT NULL,
+    season INTEGER,
+    game_date TEXT,
+    pp_goals INTEGER,
+    pp_opportunities INTEGER,
+    times_shorthanded INTEGER,
+    pp_goals_against INTEGER,
+    PRIMARY KEY (game_id, team_abbrev),
+    FOREIGN KEY (game_id) REFERENCES games(game_id),
     FOREIGN KEY (team_abbrev) REFERENCES teams(team_abbrev)
 );
 

@@ -1,7 +1,17 @@
 [theme]
-base = "dark"
+font = "sans serif"
+
+# Light and dark variants: each viewer picks one with the sun/moon button in
+# the page header (or Streamlit's own Settings menu). dashboard/style.py has
+# the matching palettes for the custom CSS and charts -- keep them in sync.
+[theme.dark]
 primaryColor = "#3b82f6"
 backgroundColor = "#0a0d12"
 secondaryBackgroundColor = "#12161d"
 textColor = "#e6e9ee"
-font = "sans serif"
+
+[theme.light]
+primaryColor = "#2563eb"
+backgroundColor = "#eef1f5"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#111827"

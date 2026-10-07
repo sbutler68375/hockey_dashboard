@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from dashboard.data import load_standings, page_header
 from dashboard.images import team_logo_url
-from dashboard.style import COLORS, apply_theme, section_label
+from dashboard.style import apply_theme, card, colors, section_label
 
 st.set_page_config(page_title="Standings", page_icon="🏒", layout="wide")
 apply_theme()
@@ -46,7 +46,7 @@ column_config = {
 # Points decide the standings, so that column is highlighted: accent-colored
 # bold numbers on a faint accent-tinted background.
 POINTS_STYLE = {
-    "color": COLORS["accent"],
+    "color": colors()["accent"],
     "font-weight": "700",
     "background-color": "rgba(59, 130, 246, 0.14)",
 }
@@ -55,7 +55,7 @@ POINTS_STYLE = {
 def show_table(df: pd.DataFrame, title: str | None = None) -> None:
     """Render one table as a card, full height, no inner scrollbar."""
     df = df.sort_values("points", ascending=False)
-    with st.container(border=True):
+    with card(title or "all teams"):
         if title:
             section_label(title)
         st.dataframe(

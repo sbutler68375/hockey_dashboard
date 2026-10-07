@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from dashboard.data import load_player_stats, page_header, selected_team
 from dashboard.images import player_headshot_url
-from dashboard.style import apply_theme, section_label, style_chart
+from dashboard.style import apply_theme, card, section_label, style_chart
 
 # Stats the page can sort by (drives both the chart and the table), per
 # player type, with display labels. First entry is the default.
@@ -45,7 +45,7 @@ st.set_page_config(page_title="Players", page_icon="🏒", layout="wide")
 apply_theme()
 season = page_header("Player Stats")
 
-with st.container(border=True):
+with card("filters"):
     section_label("Filters")
     col1, col2 = st.columns(2)
     with col1:
@@ -75,7 +75,7 @@ if team_filter is not None:
 players = players.copy()
 players["name"] = players["first_name"] + " " + players["last_name"]
 
-with st.container(border=True):
+with card("leaders_chart"):
     chart_players = players
     min_games = 0
     if sort_col in RATE_STATS and not players.empty:
@@ -98,7 +98,7 @@ with st.container(border=True):
     if min_games > 1:
         st.caption(f"Chart limited to goalies with at least {min_games} games played.")
 
-with st.container(border=True):
+with card("full_table"):
     section_label(f"Full table -- sorted by {sort_label}")
     display_cols = [c for c in TABLE_COLUMNS[player_type] if c in players.columns]
 

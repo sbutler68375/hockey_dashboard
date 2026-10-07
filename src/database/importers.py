@@ -142,6 +142,13 @@ def load_players() -> int:
         )
 
 
+def load_special_teams_games() -> int:
+    """Load the special_teams_games files into the team_game_special_teams table."""
+    df = read_all_seasons("special_teams_games")  # already snake_case, matches schema directly
+    with get_connection() as conn:
+        return upsert_dataframe(conn, "team_game_special_teams", df, pk_columns=["game_id", "team_abbrev"])
+
+
 def load_all() -> dict[str, int]:
     """Run every importer in dependency order (teams before anything referencing them)."""
     results = {}
@@ -150,4 +157,5 @@ def load_all() -> dict[str, int]:
     results["team_season_stats"] = load_team_season_stats()
     results["games"] = load_games()
     results["players"] = load_players()
+    results["team_game_special_teams"] = load_special_teams_games()
     return results

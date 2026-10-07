@@ -4,8 +4,9 @@ Produces, per season:
     data/raw/standings_<season>.csv   -- one row per team: today's standings for the
                                          current season, final standings for a past one
     data/raw/team_stats_<season>.csv  -- one row per team, aggregated skater/goalie totals
-                                         plus power-play % and penalty-kill %, for the
-                                         season and over each team's last 10 games
+                                         plus power-play % and penalty-kill %
+    data/raw/special_teams_games_<season>.csv -- one row per team per game: power-play
+                                         goals/chances and penalty-kill chances/goals against
 
 Historical seasons are only fetched once (they're complete and never
 change) -- see src/utils/raw_data.py. Each refresh re-fetches the
@@ -46,7 +47,6 @@ from src.utils.raw_data import save_season_csv, seasons_to_collect
 logger = get_logger(__name__)
 
 REQUEST_DELAY_SECONDS = 0.2  # be polite to an unofficial, unauthenticated API
-RECENT_GAMES = 10  # window for the "last 10 games" special-teams numbers
 
 
 def collect_standings(season: str = CURRENT_SEASON) -> pd.DataFrame:
@@ -103,24 +103,14 @@ def _aggregate_team_stats(team_abbrev: str, season: str) -> dict:
     return row
 
 
-def _last_games_pct(report: str, season: str, abbrev_by_id: dict, successes, chances: str) -> pd.Series:
-    """Success rate over each team's last RECENT_GAMES games, indexed by team_abbrev.
-
-    successes(df) returns the per-game successes (e.g. PP goals scored, or
-    opponent power plays killed), chances names the per-game opportunities.
-    """
-    games = pd.DataFrame(get_team_game_reports(report, season, GAME_TYPE_REGULAR_SEASON))
-    games["team_abbrev"] = games["teamId"].map(abbrev_by_id)
-    games["successes"] = successes(games)
-    recent = games.sort_values("gameDate").groupby("team_abbrev").tail(RECENT_GAMES)
-    totals = recent.groupby("team_abbrev")[["successes", chances]].sum()
-    return (totals["successes"] / totals[chances]).where(totals[chances] > 0)
+def _abbrev_by_team_id() -> dict[int, str]:
+    """Stats API numeric team id -> team abbreviation."""
+    return {team["id"]: team["triCode"] for team in get_stats_api_teams()}
 
 
 def _special_teams(season: str) -> pd.DataFrame:
-    """Power-play % and penalty-kill % for every team, for the whole season
-    and over its last RECENT_GAMES games, keyed by team_abbrev."""
-    abbrev_by_id = {team["id"]: team["triCode"] for team in get_stats_api_teams()}
+    """Season power-play % and penalty-kill % for every team, keyed by team_abbrev."""
+    abbrev_by_id = _abbrev_by_team_id()
     rows = [
         {
             "team_abbrev": abbrev_by_id.get(summary["teamId"]),
@@ -130,19 +120,37 @@ def _special_teams(season: str) -> pd.DataFrame:
         for summary in get_team_summaries(season, GAME_TYPE_REGULAR_SEASON)
     ]
     df = pd.DataFrame(rows, columns=["team_abbrev", "power_play_pct", "penalty_kill_pct"])
-    pp_recent = _last_games_pct(
-        "powerplay", season, abbrev_by_id, lambda g: g["powerPlayGoalsFor"], "ppOpportunities"
-    )
-    pk_recent = _last_games_pct(
-        "penaltykill", season, abbrev_by_id,
-        lambda g: g["timesShorthanded"] - g["ppGoalsAgainst"], "timesShorthanded",
-    )
-    df["power_play_pct_last_10"] = df["team_abbrev"].map(pp_recent)
-    df["penalty_kill_pct_last_10"] = df["team_abbrev"].map(pk_recent)
     missing = set(TEAM_ABBREVIATIONS) - set(df["team_abbrev"])
     if missing:
         logger.warning("No special-teams stats for %s in %s.", sorted(missing), season)
     return df
+
+
+def collect_special_teams_games(season: str = CURRENT_SEASON) -> pd.DataFrame:
+    """One row per team per regular-season game: power-play goals and chances,
+    and times shorthanded and power-play goals allowed (the penalty kill)."""
+    logger.info("Fetching per-game special-teams stats for %s...", season)
+    keys = ["teamId", "gameId", "gameDate"]
+    pp = pd.DataFrame(get_team_game_reports("powerplay", season, GAME_TYPE_REGULAR_SEASON))
+    pk = pd.DataFrame(get_team_game_reports("penaltykill", season, GAME_TYPE_REGULAR_SEASON))
+    if pp.empty or pk.empty:
+        logger.warning("No per-game special-teams stats yet for %s.", season)
+        return pd.DataFrame(columns=[
+            "game_id", "team_abbrev", "season", "game_date",
+            "pp_goals", "pp_opportunities", "times_shorthanded", "pp_goals_against",
+        ])
+    df = pp[keys + ["powerPlayGoalsFor", "ppOpportunities"]].merge(
+        pk[keys + ["timesShorthanded", "ppGoalsAgainst"]], on=keys, how="outer"
+    )
+    df["team_abbrev"] = df["teamId"].map(_abbrev_by_team_id())
+    df["season"] = int(season)
+    df = df.rename(columns={
+        "gameId": "game_id", "gameDate": "game_date",
+        "powerPlayGoalsFor": "pp_goals", "ppOpportunities": "pp_opportunities",
+        "timesShorthanded": "times_shorthanded", "ppGoalsAgainst": "pp_goals_against",
+    }).drop(columns="teamId")
+    logger.info("Got special-teams stats for %d team-games.", len(df))
+    return df.sort_values(["game_date", "game_id"]).reset_index(drop=True)
 
 
 def collect_team_stats(season: str = CURRENT_SEASON) -> pd.DataFrame:
@@ -174,6 +182,9 @@ def main() -> None:
 
     for season in seasons_to_collect("team_stats"):
         save_season_csv(collect_team_stats(season), "team_stats", season)
+
+    for season in seasons_to_collect("special_teams_games"):
+        save_season_csv(collect_special_teams_games(season), "special_teams_games", season)
 
 
 if __name__ == "__main__":

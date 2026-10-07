@@ -13,16 +13,24 @@ every other endpoint in this project):
     https://assets.nhle.com/mugs/nhl/20252026/TOR/8477939.png    -> 200, image/png
 """
 
+from dashboard.style import theme_type
+
+
+def _logo_variant() -> str:
+    """'dark' or 'light' -- the logo version drawn for the active theme's
+    background (some dark versions are mostly white, invisible on light)."""
+    return theme_type()
+
 
 def nhl_logo_url() -> str:
-    """SVG NHL league logo, dark-background version (verified live 2026-10-06)."""
-    return "https://assets.nhle.com/logos/nhl/svg/NHL_dark.svg"
+    """SVG NHL league logo for the active theme (both versions verified live 2026-10-07)."""
+    return f"https://assets.nhle.com/logos/nhl/svg/NHL_{_logo_variant()}.svg"
 
 
 def team_logo_url(team_abbrev: str) -> str:
-    """SVG team logo, dark-background version (matches the dashboard's dark theme;
-    all 32 verified live 2026-10-06)."""
-    return f"https://assets.nhle.com/logos/nhl/svg/{team_abbrev}_dark.svg"
+    """SVG team logo for the active theme (all 32 _dark verified live 2026-10-06,
+    all 32 _light 2026-10-07)."""
+    return f"https://assets.nhle.com/logos/nhl/svg/{team_abbrev}_{_logo_variant()}.svg"
 
 
 def player_headshot_url(player_id: int, team_abbrev: str, season: int) -> str:

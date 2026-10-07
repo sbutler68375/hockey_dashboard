@@ -18,7 +18,7 @@ from dashboard.data import (
     team_display_name,
     team_results,
 )
-from dashboard.style import apply_theme, result_style, section_label
+from dashboard.style import apply_theme, card, result_style, section_label
 
 st.set_page_config(page_title="Season Games", page_icon="🏒", layout="wide")
 apply_theme()
@@ -44,7 +44,7 @@ if games.empty:
     st.info(f"{team_display_name(team)} played no {game_kind} games in {season_label(season)}{yet}.")
     st.stop()
 
-with st.container(border=True):
+with card("season_games"):
     section_label(f"{team_display_name(team)} -- {len(games)} games ({record_text(games)})")
     st.dataframe(
         games[["game_date", "opponent", "home_away", "result", "venue"]]

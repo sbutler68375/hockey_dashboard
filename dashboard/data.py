@@ -5,12 +5,14 @@ src.database.queries directly, so caching and the refresh pipeline stay
 in one place instead of duplicated across pages.
 """
 
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -21,9 +23,11 @@ from src.database.queries import (
     get_standings,
     get_team_games,
     get_team_season_stats,
+    get_team_special_teams_games,
     get_teams,
 )
 from dashboard.images import nhl_logo_url, team_logo_url
+from dashboard.style import theme_type
 from src.utils.constants import COLLECTED_SEASONS, CURRENT_SEASON, TEAM_ABBREVIATIONS
 
 CACHE_TTL_SECONDS = 300  # data only changes when the user hits "Refresh", but
@@ -35,6 +39,15 @@ CACHE_TTL_SECONDS = 300  # data only changes when the user hits "Refresh", but
 # this plain key survives page switches, so the choice sticks app-wide.
 _SEASON_STATE_KEY = "selected_season"
 _SEASON_WIDGET_KEY = "_season_toggle"
+
+# Set by the header's sun/moon button to the theme to switch to ("Light"
+# or "Dark"); page_header() then runs the switch on that rerun.
+_THEME_SWITCH_KEY = "_theme_switch_to"
+
+# URL path of every page ("" = Home), for saving the theme choice per page.
+PAGE_PATHS = [""] + [
+    p.stem.split("_", 1)[1] for p in sorted((Path(__file__).parent / "pages").glob("*.py"))
+]
 
 # Same pattern for the team picked with the header's logo button.
 # None means no team selected (all teams).
@@ -66,6 +79,11 @@ def load_player_stats(season: int, player_type: str | None = None) -> pd.DataFra
 @st.cache_data(ttl=CACHE_TTL_SECONDS)
 def load_team_season_stats(season: int) -> pd.DataFrame:
     return get_team_season_stats(season)
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS)
+def load_team_special_teams_games(team_abbrev: str, season: int) -> pd.DataFrame:
+    return get_team_special_teams_games(team_abbrev, season)
 
 
 def team_results(games: pd.DataFrame, team: str) -> pd.DataFrame:
@@ -192,16 +210,77 @@ def _toggle_side_label(text: str, active: bool, align: str) -> None:
     )
 
 
+def _request_theme_switch() -> None:
+    st.session_state[_THEME_SWITCH_KEY] = "Dark" if theme_type() == "light" else "Light"
+
+
+def _theme_button() -> None:
+    """The header's sun/moon button: switches this browser between the light
+    and dark themes (config.toml's [theme.light] / [theme.dark])."""
+    to_light = theme_type() == "dark"
+    st.button(
+        "", key="theme_button", on_click=_request_theme_switch,
+        icon=":material/light_mode:" if to_light else ":material/dark_mode:",
+        help="Switch to light theme" if to_light else "Switch to dark theme",
+    )
+
+    target = st.session_state.pop(_THEME_SWITCH_KEY, None)
+    if target is None:
+        return
+    # Streamlit has no Python API for a viewer's theme. Its frontend reads the
+    # choice from localStorage on page load (key "stActiveTheme-<path>-v2",
+    # value "Light"/"Dark" as JSON -- observed in Streamlit 1.65's frontend;
+    # recheck after upgrading). So save it for every page and reload, putting
+    # the selected team and season in the URL so the reload keeps them
+    # (_restore_from_url() reads them back).
+    params = {"season": selected_season()}
+    if selected_team():
+        params["team"] = selected_team()
+    # components.html, not st.iframe: Streamlit 1.65 flags it as deprecated,
+    # but st.iframe didn't run this script when tried (2026-10-07).
+    components.html(
+        f"""<script>
+        const store = window.parent.localStorage;
+        const base = window.parent.location.pathname.replace(/[^/]*$/, "");
+        for (const page of {json.dumps(PAGE_PATHS)}) {{
+            store.setItem("stActiveTheme-" + base + page + "-v2", {json.dumps(json.dumps(target))});
+        }}
+        store.setItem("stActiveTheme-" + window.parent.location.pathname + "-v2", {json.dumps(json.dumps(target))});
+        // This script runs in a sandboxed iframe, which may not navigate the
+        // page itself -- so hand the reload to a function created in (and run
+        // by) the same-origin parent page.
+        const search = new URLSearchParams({json.dumps({k: str(v) for k, v in params.items()})}).toString();
+        window.parent.setTimeout(new window.parent.Function("location.search = " + JSON.stringify(search)), 0);
+        </script>""",
+        height=0,
+    )
+
+
+def _restore_from_url() -> None:
+    """After a theme switch reloads the page (new session), restore the team
+    and season it put in the URL, then clear them from the URL."""
+    params = st.query_params
+    if "season" in params and _SEASON_STATE_KEY not in st.session_state:
+        if params["season"] in COLLECTED_SEASONS:
+            st.session_state[_SEASON_STATE_KEY] = int(params["season"])
+        if params.get("team") in TEAM_ABBREVIATIONS:
+            st.session_state[_TEAM_STATE_KEY] = params["team"]
+    if "season" in params or "team" in params:
+        params.clear()
+
+
 def page_header(title: str) -> int:
-    """Render a page title with the team logo button and the season toggle
-    switch (last season <-> Current) in the top-right corner, and return the
+    """Render a page title with the team logo button, the season toggle
+    switch (last season <-> Current) and the light/dark theme button in the
+    top-right corner, and return the
     selected season. Every page calls this in place of st.title() so the
     controls sit in the same spot everywhere; use selected_team() for the
     team."""
+    _restore_from_url()
     is_current = selected_season() == current_season()
     st.session_state[_SEASON_WIDGET_KEY] = is_current
 
-    title_col, team_col, toggle_col = st.columns([3, 0.35, 1], vertical_alignment="center")
+    title_col, team_col, toggle_col, theme_col = st.columns([3, 0.35, 1, 0.25], vertical_alignment="center")
     with title_col:
         st.title(title)
     with team_col:
@@ -219,6 +298,8 @@ def page_header(title: str) -> int:
             )
         with current_col:
             _toggle_side_label("Current", is_current, "left")
+    with theme_col:
+        _theme_button()
     return selected_season()
 
 
