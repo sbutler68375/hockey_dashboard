@@ -9,7 +9,7 @@ simple, reusable, and easy to re-verify against the live API.
 from typing import Any
 
 from src.api.client import get_json
-from src.utils.constants import NHL_API_BASE
+from src.utils.constants import NHL_API_BASE, NHL_STATS_API_BASE
 
 
 def get_standings_now() -> list[dict[str, Any]]:
@@ -60,3 +60,32 @@ def get_team_season_schedule(team_abbrev: str, season: str) -> list[dict[str, An
     url = f"{NHL_API_BASE}/club-schedule-season/{team_abbrev}/{season}"
     data = get_json(url)
     return data.get("games", [])
+
+
+def get_stats_api_teams() -> list[dict[str, Any]]:
+    """Return every team the stats API knows (past franchises included),
+    each with its numeric id and abbreviation (triCode)."""
+    data = get_json(f"{NHL_STATS_API_BASE}/team")
+    return data.get("data", [])
+
+
+def get_team_summaries(season: str, game_type: int) -> list[dict[str, Any]]:
+    """Return one season summary row per team from the stats API,
+    including powerPlayPct and penaltyKillPct (fractions, e.g. 0.21)."""
+    url = f"{NHL_STATS_API_BASE}/team/summary?cayenneExp=seasonId={season}%20and%20gameTypeId={game_type}"
+    data = get_json(url)
+    return data.get("data", [])
+
+
+def get_team_game_reports(report: str, season: str, game_type: int) -> list[dict[str, Any]]:
+    """Return one row per team per game from a stats API team report.
+
+    report is "powerplay" (ppGoalsFor, ppOpportunities) or "penaltykill"
+    (ppGoalsAgainst, timesShorthanded); every row has teamId and gameDate.
+    """
+    url = (
+        f"{NHL_STATS_API_BASE}/team/{report}?isAggregate=false&isGame=true&limit=-1"
+        f"&cayenneExp=seasonId={season}%20and%20gameTypeId={game_type}"
+    )
+    data = get_json(url)
+    return data.get("data", [])

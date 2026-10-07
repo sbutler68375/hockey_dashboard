@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS team_season_stats (
     team_save_pct REAL,
     total_goals_against INTEGER,
     total_shutouts INTEGER,
+    power_play_pct REAL,    -- fraction, e.g. 0.21 = 21%
+    penalty_kill_pct REAL,
+    power_play_pct_last_10 REAL,    -- same, over the team's last 10 games
+    penalty_kill_pct_last_10 REAL,
     PRIMARY KEY (team_abbrev, season),
     FOREIGN KEY (team_abbrev) REFERENCES teams(team_abbrev)
 );

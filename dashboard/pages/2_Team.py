@@ -30,6 +30,10 @@ FORM_WINDOW = 10           # games per rolling win % point
 MIN_GAMES_FOR_TREND = 20   # fewer full-window points than this makes the slope noise
 TREND_FLAT_POINTS = 5      # trend changes smaller than this (pct points) read as "flat"
 
+# Special-teams arrows: last-10 changes smaller than this (3 pct points, about
+# one power-play goal) show as "Steady" -- over ~30 chances that's just noise.
+SPECIAL_TEAMS_STEADY_BAND = 0.03
+
 st.set_page_config(page_title="Team", page_icon="🏒", layout="wide")
 apply_theme()
 season = page_header("Team")
@@ -74,6 +78,35 @@ if not team_season.empty:
         t2.metric("PP goals", int(ts["total_powerplay_goals"]))
         t3.metric("Save %", f"{ts['team_save_pct']:.3f}" if ts["team_save_pct"] == ts["team_save_pct"] else "n/a")
         t4.metric("Shutouts", int(ts["total_shutouts"]))
+
+    # Special teams: PP % and PK % with the team's league rank (higher is
+    # better for both), plus a green/red arrow for whether the last 10 games
+    # beat the season rate. Older databases may not have these columns yet.
+    special_columns = {"power_play_pct", "penalty_kill_pct", "power_play_pct_last_10", "penalty_kill_pct_last_10"}
+    if special_columns <= set(season_stats.columns) and pd.notna(ts["power_play_pct"]):
+        # With 10 or fewer games played, "last 10" is the whole season -- nothing to compare.
+        has_trend = int(row["games_played"]) > 10
+        with st.container(border=True):
+            section_label("Special teams")
+            sp1, sp2, _, _ = st.columns(4)
+            for col, label, column in [
+                (sp1, "Power play %", "power_play_pct"),
+                (sp2, "Penalty kill %", "penalty_kill_pct"),
+            ]:
+                ranks = season_stats[column].rank(ascending=False, method="min")
+                rank = int(ranks[season_stats["team_abbrev"] == team].iloc[0])
+                suffix = "th" if 11 <= rank % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(rank % 10, "th")
+                last_10 = ts[f"{column}_last_10"]
+                with col:
+                    change = last_10 - ts[column] if pd.notna(last_10) else None
+                    if has_trend and change is not None and abs(change) >= SPECIAL_TEAMS_STEADY_BAND:
+                        # A leading "-" makes Streamlit show a red down arrow; "+" a green up one.
+                        st.metric(label, f"{ts[column]:.1%}", f"{change:+.1%} last 10 games ({last_10:.1%})")
+                    elif has_trend and change is not None:
+                        st.metric(label, f"{ts[column]:.1%}", f"Steady last 10 games ({last_10:.1%})", delta_color="off", delta_arrow="off")
+                    else:
+                        st.metric(label, f"{ts[column]:.1%}", "Trend after 10+ games", delta_color="off", delta_arrow="off")
+                    st.caption(f"{rank}{suffix} of {ranks.notna().sum()} in NHL")
 
 games = load_completed_games(season, game_type=2)
 team_log = build_team_game_log(games)
@@ -237,16 +270,29 @@ else:
                     st.image(player_headshot_url(top_plus_minus["player_id"], team, season), width=88)
                     st.metric("Best +/-", f"{top_plus_minus['first_name']} {top_plus_minus['last_name']}", f"{int(top_plus_minus['plus_minus']):+d}")
 
-            if not goalies.empty and goalies["save_pctg"].notna().any():
-                best_goalie = goalies.loc[goalies["save_pctg"].idxmax()]
-                g1, _, _ = st.columns(3)
-                with g1:
-                    st.image(player_headshot_url(best_goalie["player_id"], team, season), width=88)
-                    st.metric(
-                        "Best goalie save %",
-                        f"{best_goalie['first_name']} {best_goalie['last_name']}",
-                        f"{best_goalie['save_pctg']:.3f}",
-                    )
+            # Starter and backup = the two goalies with the most starts (ties
+            # broken by games played, then ice time). Picking by save % instead
+            # let a goalie who mopped up part of one game outrank the real tandem.
+            if not goalies.empty:
+                tandem = goalies.sort_values(
+                    ["games_started", "games_played", "goalie_time_on_ice_seconds"], ascending=False
+                ).head(2)
+                # The tandem's better save % gets the same green highlight as the
+                # skater leaders; the other stays gray (both green on a tie).
+                best_save_pct = tandem["save_pctg"].max()
+                goalie_cols = st.columns(3)
+                for col, role, (_, goalie) in zip(goalie_cols, ["Starter", "Backup"], tandem.iterrows()):
+                    save_pct = f"{goalie['save_pctg']:.3f}" if pd.notna(goalie["save_pctg"]) else "n/a"
+                    starts = int(goalie["games_started"])
+                    is_better = pd.notna(goalie["save_pctg"]) and goalie["save_pctg"] == best_save_pct
+                    with col:
+                        st.image(player_headshot_url(goalie["player_id"], team, season), width=88)
+                        st.metric(
+                            f"{role} goalie",
+                            f"{goalie['first_name']} {goalie['last_name']}",
+                            f"{save_pct} SV% · {starts} start{'' if starts == 1 else 's'}",
+                            delta_color="normal" if is_better else "off",
+                        )
 
             st.caption(
                 "Player numbers are season totals, not recent-game trends -- this "

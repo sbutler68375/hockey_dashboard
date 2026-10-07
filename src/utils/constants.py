@@ -9,6 +9,12 @@ guaranteed to stay stable forever.
 
 NHL_API_BASE = "https://api-web.nhle.com/v1"
 
+# The NHL's separate stats API (the one behind NHL.com/stats). It has
+# team-level numbers api-web doesn't, like power-play and penalty-kill %
+# (verified live 2026-10-07). Teams are identified by numeric id, not
+# abbreviation -- the /team endpoint maps one to the other.
+NHL_STATS_API_BASE = "https://api.nhle.com/stats/rest/en"
+
 # All 32 current NHL team abbreviations, as returned by the standings
 # endpoint's teamAbbrev.default field (verified live 2026-08-26).
 TEAM_ABBREVIATIONS = [

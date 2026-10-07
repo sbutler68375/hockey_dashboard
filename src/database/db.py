@@ -35,6 +35,10 @@ def get_connection() -> sqlite3.Connection:
 # built before a column existed gets it added here instead.
 ADDED_COLUMNS = [
     ("games", "last_period_type", "TEXT"),
+    ("team_season_stats", "power_play_pct", "REAL"),
+    ("team_season_stats", "penalty_kill_pct", "REAL"),
+    ("team_season_stats", "power_play_pct_last_10", "REAL"),
+    ("team_season_stats", "penalty_kill_pct_last_10", "REAL"),
 ]
 
 

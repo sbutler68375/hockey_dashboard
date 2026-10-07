@@ -4,6 +4,8 @@ Produces, per season:
     data/raw/standings_<season>.csv   -- one row per team: today's standings for the
                                          current season, final standings for a past one
     data/raw/team_stats_<season>.csv  -- one row per team, aggregated skater/goalie totals
+                                         plus power-play % and penalty-kill %, for the
+                                         season and over each team's last 10 games
 
 Historical seasons are only fetched once (they're complete and never
 change) -- see src/utils/raw_data.py. Each refresh re-fetches the
@@ -13,13 +15,10 @@ Run from the project root:
     venv\\Scripts\\python.exe collectors\\collect_teams.py
 
 Note on team_stats: the NHL's club-stats endpoint returns per-player
-totals, not team-level special-teams data, so true power-play% and
-penalty-kill% (opportunities, not just goals) are NOT available from
-this endpoint. This collector aggregates what IS available (goals,
-assists, shots, powerplay/shorthanded goals, goaltending totals) into
-team-level sums. If precise PP%/PK% turn out to be needed for feature
-engineering later, that will require investigating a different NHL
-stats endpoint at that time -- it is not silently faked here.
+totals only, which this collector sums into team totals (goals, shots,
+powerplay/shorthanded goals, goaltending). Power-play % and penalty-kill %
+need opportunity counts that endpoint doesn't have, so they come from the
+NHL stats API's team summary instead (one request for all teams).
 """
 
 import sys
@@ -33,9 +32,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.api.client import NHLApiError
 from src.api.nhl import (
     get_season_standings_end_dates,
+    get_stats_api_teams,
     get_standings_now,
     get_standings_on,
+    get_team_game_reports,
     get_team_stats,
+    get_team_summaries,
 )
 from src.utils.constants import CURRENT_SEASON, GAME_TYPE_REGULAR_SEASON, TEAM_ABBREVIATIONS
 from src.utils.logging_config import get_logger
@@ -44,6 +46,7 @@ from src.utils.raw_data import save_season_csv, seasons_to_collect
 logger = get_logger(__name__)
 
 REQUEST_DELAY_SECONDS = 0.2  # be polite to an unofficial, unauthenticated API
+RECENT_GAMES = 10  # window for the "last 10 games" special-teams numbers
 
 
 def collect_standings(season: str = CURRENT_SEASON) -> pd.DataFrame:
@@ -100,6 +103,48 @@ def _aggregate_team_stats(team_abbrev: str, season: str) -> dict:
     return row
 
 
+def _last_games_pct(report: str, season: str, abbrev_by_id: dict, successes, chances: str) -> pd.Series:
+    """Success rate over each team's last RECENT_GAMES games, indexed by team_abbrev.
+
+    successes(df) returns the per-game successes (e.g. PP goals scored, or
+    opponent power plays killed), chances names the per-game opportunities.
+    """
+    games = pd.DataFrame(get_team_game_reports(report, season, GAME_TYPE_REGULAR_SEASON))
+    games["team_abbrev"] = games["teamId"].map(abbrev_by_id)
+    games["successes"] = successes(games)
+    recent = games.sort_values("gameDate").groupby("team_abbrev").tail(RECENT_GAMES)
+    totals = recent.groupby("team_abbrev")[["successes", chances]].sum()
+    return (totals["successes"] / totals[chances]).where(totals[chances] > 0)
+
+
+def _special_teams(season: str) -> pd.DataFrame:
+    """Power-play % and penalty-kill % for every team, for the whole season
+    and over its last RECENT_GAMES games, keyed by team_abbrev."""
+    abbrev_by_id = {team["id"]: team["triCode"] for team in get_stats_api_teams()}
+    rows = [
+        {
+            "team_abbrev": abbrev_by_id.get(summary["teamId"]),
+            "power_play_pct": summary["powerPlayPct"],
+            "penalty_kill_pct": summary["penaltyKillPct"],
+        }
+        for summary in get_team_summaries(season, GAME_TYPE_REGULAR_SEASON)
+    ]
+    df = pd.DataFrame(rows, columns=["team_abbrev", "power_play_pct", "penalty_kill_pct"])
+    pp_recent = _last_games_pct(
+        "powerplay", season, abbrev_by_id, lambda g: g["powerPlayGoalsFor"], "ppOpportunities"
+    )
+    pk_recent = _last_games_pct(
+        "penaltykill", season, abbrev_by_id,
+        lambda g: g["timesShorthanded"] - g["ppGoalsAgainst"], "timesShorthanded",
+    )
+    df["power_play_pct_last_10"] = df["team_abbrev"].map(pp_recent)
+    df["penalty_kill_pct_last_10"] = df["team_abbrev"].map(pk_recent)
+    missing = set(TEAM_ABBREVIATIONS) - set(df["team_abbrev"])
+    if missing:
+        logger.warning("No special-teams stats for %s in %s.", sorted(missing), season)
+    return df
+
+
 def collect_team_stats(season: str = CURRENT_SEASON) -> pd.DataFrame:
     """Fetch and aggregate season stat totals for every team."""
     rows = []
@@ -115,6 +160,10 @@ def collect_team_stats(season: str = CURRENT_SEASON) -> pd.DataFrame:
         raise ValueError("Failed to collect team stats for every team -- aborting.")
 
     df = pd.DataFrame(rows)
+    try:
+        df = df.merge(_special_teams(season), on="team_abbrev", how="left")
+    except NHLApiError as exc:
+        logger.error("Skipping special-teams stats for %s due to API failures: %s", season, exc)
     logger.info("Collected team stats for %d/%d teams.", len(df), len(TEAM_ABBREVIATIONS))
     return df
 
