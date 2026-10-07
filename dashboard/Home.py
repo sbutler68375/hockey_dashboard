@@ -19,8 +19,8 @@ apply_theme()
 
 page_header("SESPN")
 st.caption(
-    "Sean's ESPN -- NHL data collection, storage, feature engineering, and "
-    "prediction modeling, built end-to-end from the public NHL API."
+    "Sean's ESPN -- NHL data collection, storage, and analytics, built "
+    "end-to-end from the public NHL API."
 )
 
 # Home page artwork: illustration with the background removed (transparent
@@ -47,6 +47,6 @@ with st.sidebar:
         if all(line.startswith("OK") for line in log):
             st.rerun()
     st.caption(
-        "Pulls fresh data from the NHL API, rebuilds the database, and "
-        "regenerates model features. Takes about 1-2 minutes."
+        "Pulls fresh data from the NHL API and rebuilds the database. "
+        "Takes about 1-2 minutes."
     )

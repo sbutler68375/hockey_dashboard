@@ -223,7 +223,7 @@ def page_header(title: str) -> int:
 
 
 def refresh_all_data(progress_callback=None) -> list[str]:
-    """Rerun the full pipeline: collectors -> build_database -> generate_features.
+    """Rerun the full pipeline: collectors -> build_database.
 
     Runs each step as a subprocess (same approach as running them
     manually from the command line) so a failure in one step is caught
@@ -241,7 +241,6 @@ def refresh_all_data(progress_callback=None) -> list[str]:
         ("Collecting player data", "collectors/collect_players.py"),
         ("Collecting game data", "collectors/collect_games.py"),
         ("Building database", "scripts/build_database.py"),
-        ("Generating features", "scripts/generate_features.py"),
     ]
     python_exe = sys.executable
     log: list[str] = []

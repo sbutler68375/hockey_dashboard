@@ -1,12 +1,11 @@
 # Hockey AI Analytics Platform
 
 An end-to-end NHL analytics pipeline: pulls real data from the NHL's public API, stores it
-in a validated SQLite database, engineers leakage-safe predictive features, trains and
-compares baseline ML models for game outcomes, and presents all of it through an
-interactive Streamlit dashboard.
+in a validated SQLite database, and presents it through an interactive Streamlit
+dashboard. Game-outcome prediction is being rebuilt from scratch.
 
 Built incrementally, phase by phase, with an emphasis on **honesty over polish** where the
-two conflict — every scope limitation and every disappointing model result in this project
+two conflict — every scope limitation in this project
 is documented in place rather than hidden, including in this README.
 
 > Want to see it running? `streamlit run dashboard/Home.py` after setup below —
@@ -18,10 +17,6 @@ is documented in place rather than hidden, including in this README.
   NHL's public (unofficial, keyless) API
 - **Stores** everything in SQLite with real primary keys, foreign keys, and validation
   (row counts, null checks, duplicate checks, referential integrity)
-- **Engineers features** for game prediction — rolling win%, scoring, and rest-day trends —
-  with data leakage prevention as a first-class design constraint, not an afterthought
-- **Trains and compares** Logistic Regression, Random Forest, and XGBoost against a
-  majority-class baseline, using a time-aware (chronological) train/val/test split
 - **Visualizes** standings, team form trends, player leaderboards, and each team's season games in a
   multi-page Streamlit + Plotly dashboard
 
@@ -31,10 +26,7 @@ is documented in place rather than hidden, including in this README.
 flowchart LR
     A[NHL Public API] -->|collectors/*.py| B[data/raw/*_season.csv]
     B -->|scripts/build_database.py| C[(SQLite\nnhl_database.db)]
-    C -->|scripts/generate_features.py| D[data/processed/features.csv]
-    D -->|scripts/train_models.py| E[models/*.joblib]
     C --> F[Streamlit Dashboard]
-    E --> F
 ```
 
 Each stage is a separate, independently-runnable script — the pipeline is meant to be
@@ -60,15 +52,12 @@ everything here runs entirely locally for free.
 collectors/          NHL API -> data/raw/<dataset>_<season>.csv (one script per data type)
 src/api/              HTTP client + endpoint wrappers for the NHL API
 src/database/         SQLite schema, import/upsert logic, queries, validation
-src/features/         Leakage-safe rolling feature engineering
-src/models/           Dataset prep, time-aware split, training, evaluation
+src/features/         Leakage-safe rolling team-form calculations (used by the Team page)
 scripts/              Runnable entrypoints that tie src/ modules together
 dashboard/            Streamlit multi-page app
 tests/                pytest suite
 database/schema.sql   Table definitions (source of truth for the DB structure)
 data/raw/             Collector output (gitignored, regenerate anytime)
-data/processed/       Generated features (gitignored, regenerate anytime)
-models/               Trained models (gitignored) + evaluation_report.json (tracked)
 ```
 
 ## Getting started
@@ -98,17 +87,11 @@ venv\Scripts\python.exe collectors\collect_games.py
 # 2. Build/update the SQLite database from those CSVs, with validation
 venv\Scripts\python.exe scripts\build_database.py
 
-# 3. Generate leakage-safe ML features from the database
-venv\Scripts\python.exe scripts\generate_features.py
-
-# 4. Train and compare models (saves to models/*.joblib)
-venv\Scripts\python.exe scripts\train_models.py
-
-# 5. Launch the dashboard
+# 3. Launch the dashboard
 venv\Scripts\python.exe -m streamlit run dashboard\Home.py
 ```
 
-The dashboard also has a "Refresh all data" button that reruns steps 1-3 for you.
+The dashboard also has a "Refresh all data" button that reruns steps 1-2 for you.
 
 ## Testing
 
@@ -116,9 +99,9 @@ The dashboard also has a "Refresh all data" button that reruns steps 1-3 for you
 venv\Scripts\python.exe -m pytest tests\ -v
 ```
 
-15 tests covering: database upsert idempotency and foreign key enforcement, the
-leakage-safe rolling feature logic (including the offseason season-boundary edge case),
-the time-aware split, and the prediction baseline's train/eval separation.
+12 tests covering: database upsert idempotency and foreign key enforcement, queries,
+and the leakage-safe rolling team-form logic (including the offseason season-boundary
+edge case).
 
 ## Data source & honest limitations
 
@@ -131,24 +114,20 @@ silently return bad data.
 Known, deliberate scope limitations (not bugs):
 
 - **Two seasons are collected:** the current one (`CURRENT_SEASON` in
-  `src/utils/constants.py`) and last season (`HISTORICAL_SEASONS`), whose games double
-  as model training history. A toggle in the top-right of every dashboard page switches
+  `src/utils/constants.py`) and last season (`HISTORICAL_SEASONS`), whose games will
+  serve as model training history. A toggle in the top-right of every dashboard page switches
   all views between them; past seasons show final standings.
 - **No starting-goalie data.** The NHL's box-score endpoints don't expose which goalie
   started a game without a separate boxscore/gamecenter collector this project doesn't
   build. Team-level rolling goals-against is used as an imperfect proxy.
 - **No per-game player logs**, so "player points" (mentioned in the original project
   roadmap as a possible target) isn't buildable — `players` data is season totals only.
-- **Model accuracy is modest: ~52-57% vs. a ~50-53% baseline** (always predicting the
-  more common outcome). This is reported plainly in the dashboard, not smoothed over.
-  Likely causes: no goalie/special-teams data, only ~900 training rows from one season,
-  and hockey's genuinely high game-to-game variance compared to other sports.
 - **No AI/LLM layer.** The original project concept included one; it was deliberately
   cut early on to avoid ongoing API costs and keep this fully free to run.
 
 ## Possible future work
 
-- Collect additional seasons once available, for a true out-of-season test holdout
+- Rebuild game-outcome prediction, trained on past seasons and tested on the current one
 - A starting-goalie collector (via NHL boxscore/gamecenter endpoints) to unlock real
   goalie-specific features
 - Per-game player logs, enabling an actual player-points model
@@ -160,7 +139,5 @@ Known, deliberate scope limitations (not bugs):
 ## About this project
 
 A hockey analytics platform built end-to-end in Python: NHL API data collection, SQLite
-storage with real validation, leakage-safe ML feature engineering, baseline model
-comparison (Logistic Regression / Random Forest / XGBoost) with time-aware evaluation,
-and an interactive Streamlit dashboard — built incrementally with tests at every stage
+storage with real validation, and an interactive Streamlit dashboard — built incrementally with tests at every stage
 and honest reporting of what does and doesn't work well.
