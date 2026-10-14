@@ -5,6 +5,7 @@ src.database.queries directly, so caching and the refresh pipeline stay
 in one place instead of duplicated across pages.
 """
 
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -19,6 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.database.db import DB_PATH
 from src.database.queries import (
     get_completed_games,
+    get_metadata,
     get_player_ratings,
     get_player_stats,
     get_standings,
@@ -237,13 +239,31 @@ def page_header(title: str) -> int:
 
 
 def last_refreshed() -> datetime | None:
-    """When the database was last rebuilt (its file's modified time), or None
-    if it hasn't been built yet. Building the database is the refresh
-    pipeline's last step, so this also covers refreshes run from the
-    command line."""
+    """When the database was last rebuilt (stored by build_database.py, so it
+    also covers refreshes run from the command line), or None if it hasn't
+    been built yet. Falls back to the file's modified time for a database
+    built before that was stored."""
     if not DB_PATH.exists():
         return None
+    stored = get_metadata("last_refreshed")
+    if stored:
+        return datetime.fromisoformat(stored)
     return datetime.fromtimestamp(DB_PATH.stat().st_mtime)
+
+
+def read_only() -> bool:
+    """True on the hosted (public) dashboard, which hides the Refresh button:
+    any visitor could click it, and what it pulled would be lost whenever the
+    host restarts the app. Set SESPN_READ_ONLY=true in the host's secrets
+    (Streamlit Community Cloud exposes them as environment variables). As a
+    fallback, Community Cloud runs apps from /mount/src/ -- observed, not
+    documented."""
+    flag = os.environ.get("SESPN_READ_ONLY", "").strip().lower()
+    if flag in {"1", "true", "yes"}:
+        return True
+    if flag in {"0", "false", "no"}:
+        return False
+    return PROJECT_ROOT.as_posix().startswith("/mount/src/")
 
 
 def format_refresh_time(when: datetime) -> str:

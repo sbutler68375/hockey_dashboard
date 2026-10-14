@@ -11,11 +11,12 @@ call daily.
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.database.db import init_db
+from src.database.db import get_connection, init_db
 from src.database.importers import load_all
 from src.database.validate import validate_all
 from src.utils.logging_config import get_logger
@@ -36,6 +37,11 @@ def main() -> None:
     ok = validate_all()
 
     if ok:
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO metadata (key, value) VALUES ('last_refreshed', ?)",
+                [datetime.now().astimezone().isoformat(timespec="seconds")],
+            )
         logger.info("Database build complete -- all validation checks passed.")
     else:
         logger.error("Database build finished with validation FAILURES -- see above.")

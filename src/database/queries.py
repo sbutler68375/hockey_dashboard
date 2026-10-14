@@ -5,6 +5,8 @@ the dashboard) can work with results the same way it already works
 with the raw CSVs.
 """
 
+import sqlite3
+
 import pandas as pd
 
 from src.database.db import get_connection
@@ -50,6 +52,17 @@ def get_standings(date: str | None = None, season: int | None = None) -> pd.Data
             ORDER BY s.points DESC
         """
         return pd.read_sql_query(query, conn, params=[date])
+
+
+def get_metadata(key: str) -> str | None:
+    """A value from the metadata table (e.g. "last_refreshed"), or None if it
+    isn't set -- or the table doesn't exist yet in an older database."""
+    with get_connection() as conn:
+        try:
+            row = conn.execute("SELECT value FROM metadata WHERE key = ?", [key]).fetchone()
+        except sqlite3.OperationalError:
+            return None
+    return row[0] if row else None
 
 
 def get_teams() -> pd.DataFrame:

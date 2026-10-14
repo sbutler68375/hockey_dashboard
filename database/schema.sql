@@ -207,6 +207,15 @@ CREATE TABLE IF NOT EXISTS player_games (
     FOREIGN KEY (team_abbrev) REFERENCES teams(team_abbrev)
 );
 
+-- Pipeline bookkeeping, e.g. ('last_refreshed', '2026-10-13T18:34:34-06:00')
+-- written by scripts/build_database.py. Kept in the database rather than read
+-- from the file's modified time, which git doesn't preserve -- the hosted
+-- dashboard would show its deploy time instead.
+CREATE TABLE IF NOT EXISTS metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_games_home_team ON games(home_team);
 CREATE INDEX IF NOT EXISTS idx_games_away_team ON games(away_team);
 CREATE INDEX IF NOT EXISTS idx_games_date ON games(game_date);

@@ -11,7 +11,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dashboard.data import format_refresh_time, last_refreshed, page_header, refresh_all_data
+from dashboard.data import format_refresh_time, last_refreshed, page_header, read_only, refresh_all_data
 from dashboard.style import apply_theme
 
 st.set_page_config(page_title="SESPN", page_icon="🏒", layout="wide", initial_sidebar_state="expanded")
@@ -32,7 +32,7 @@ with st.container(key="home_hero"):
 
 with st.sidebar:
     st.header("Data")
-    if st.button("Refresh all data", width="stretch"):
+    if not read_only() and st.button("Refresh all data", width="stretch"):
         progress = st.empty()
         with st.spinner("Refreshing..."):
             def show_progress(step: str) -> None:
@@ -51,7 +51,10 @@ with st.sidebar:
         f"**Last refreshed:** {format_refresh_time(refreshed_at)}"
         if refreshed_at else "**Last refreshed:** never"
     )
-    st.caption(
-        "Pulls fresh data from the NHL API and rebuilds the database. "
-        "Takes about 1-2 minutes."
-    )
+    if read_only():
+        st.caption("Data is updated by the site owner.")
+    else:
+        st.caption(
+            "Pulls fresh data from the NHL API and rebuilds the database. "
+            "Takes about 1-2 minutes."
+        )

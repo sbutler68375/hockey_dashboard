@@ -105,6 +105,13 @@ venv\Scripts\python.exe -m streamlit run dashboard\Home.py
 The dashboard also has a "Refresh all data" button that reruns steps 1-3 for you (scoring
 with the saved models -- it doesn't retrain).
 
+## Hosting
+
+The dashboard can run on Streamlit Community Cloud straight from this repo (main file
+`dashboard/Home.py`, Python 3.12). The database and the two trained models are committed
+for that reason. The hosted copy is read-only: set the secret `SESPN_READ_ONLY = "true"`
+to hide the Refresh button. Update it by refreshing locally and pushing.
+
 ## Model ratings
 
 Two models answer "how good is this team/player really?" by predicting the future from
