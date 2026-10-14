@@ -1,0 +1,107 @@
+{
+  "model": "player_ratings",
+  "target": "future_points_per_game",
+  "features": [
+    "games_counted",
+    "points_per_game",
+    "goals_per_game",
+    "pp_points_per_game",
+    "shots_per_game",
+    "shooting_pct",
+    "toi_per_game",
+    "pp_toi_per_game",
+    "sh_toi_per_game",
+    "points_per_game_weighted",
+    "goals_per_game_weighted",
+    "pp_points_per_game_weighted",
+    "shots_per_game_weighted",
+    "shooting_pct_weighted",
+    "prior_points_per_game",
+    "prior_games_played",
+    "position_group"
+  ],
+  "train_seasons": [
+    20232024,
+    20242025
+  ],
+  "test_season": 20252026,
+  "train_rows": 12106,
+  "test_rows": 6006,
+  "production_rows": 18112,
+  "candidates": {
+    "League average (baseline)": {
+      "cv_mae": 0.24864941058638726,
+      "best_params": {},
+      "test": {
+        "mae": 0.25421094682617895,
+        "rmse": 0.32517025200414396,
+        "r2": -0.0010129689108240303
+      }
+    },
+    "Current results only (baseline)": {
+      "cv_mae": 0.16396359168968372,
+      "best_params": {},
+      "test": {
+        "mae": 0.1676261608639751,
+        "rmse": 0.2194306973357806,
+        "r2": 0.544159555359399
+      }
+    },
+    "Ridge regression": {
+      "cv_mae": 0.14593777521062162,
+      "best_params": {
+        "alpha": 0.1
+      },
+      "test": {
+        "mae": 0.14581830336999768,
+        "rmse": 0.19044584301134299,
+        "r2": 0.6566309998127022
+      }
+    },
+    "Random forest": {
+      "cv_mae": 0.15208483470397788,
+      "best_params": {
+        "max_depth": 8,
+        "min_samples_leaf": 5
+      },
+      "test": {
+        "mae": 0.14464433479654099,
+        "rmse": 0.18960256108873827,
+        "r2": 0.6596650991292197
+      }
+    },
+    "XGBoost": {
+      "cv_mae": 0.14851053372799483,
+      "best_params": {
+        "learning_rate": 0.1,
+        "max_depth": 2,
+        "min_child_weight": 20
+      },
+      "test": {
+        "mae": 0.1445621064569785,
+        "rmse": 0.18937970081808192,
+        "r2": 0.6604646933123921
+      }
+    }
+  },
+  "chosen": "Ridge regression",
+  "feature_importance": {
+    "toi_per_game": 0.03841234423593402,
+    "position_group": 0.02686757139632468,
+    "points_per_game": 0.008896888316534651,
+    "goals_per_game_weighted": 0.006093830921062715,
+    "shots_per_game": 0.00607986453190501,
+    "points_per_game_weighted": 0.0058835247760469335,
+    "prior_points_per_game": 0.0054329820666830396,
+    "shots_per_game_weighted": 0.00507281095041735,
+    "shooting_pct_weighted": 0.0032071857468450537,
+    "pp_toi_per_game": 0.0023469266174605376,
+    "sh_toi_per_game": 0.0017443806124454952,
+    "prior_games_played": 0.0005850671905221983,
+    "pp_points_per_game_weighted": 0.0004792924879195859,
+    "goals_per_game": 0.0004410800535218806,
+    "games_counted": 1.3720615876627873e-05,
+    "shooting_pct": -3.494900429710235e-05,
+    "pp_points_per_game": -4.9857107727363516e-05
+  }
+}

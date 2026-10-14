@@ -1,0 +1,113 @@
+{
+  "model": "team_ratings",
+  "target": "rest_of_season_points_pct",
+  "features": [
+    "games_counted",
+    "points_pct",
+    "goal_share",
+    "shot_share",
+    "attempt_share",
+    "sat_pct_5v5",
+    "shooting_pct",
+    "save_pct",
+    "pp_pct",
+    "pk_pct",
+    "points_pct_weighted",
+    "goal_share_weighted",
+    "shot_share_weighted",
+    "attempt_share_weighted",
+    "sat_pct_5v5_weighted",
+    "shooting_pct_weighted",
+    "save_pct_weighted",
+    "pp_pct_weighted",
+    "pk_pct_weighted",
+    "prior_points_pct"
+  ],
+  "train_seasons": [
+    20232024,
+    20242025
+  ],
+  "test_season": 20252026,
+  "train_rows": 3712,
+  "test_rows": 1856,
+  "production_rows": 5568,
+  "candidates": {
+    "League average (baseline)": {
+      "cv_mae": 0.0881856009918737,
+      "best_params": {},
+      "test": {
+        "mae": 0.07986030233105346,
+        "rmse": 0.10264795475947205,
+        "r2": -0.005738912215855985
+      }
+    },
+    "Current results only (baseline)": {
+      "cv_mae": 0.07294059785642928,
+      "best_params": {},
+      "test": {
+        "mae": 0.07889533186978866,
+        "rmse": 0.0996056079015202,
+        "r2": 0.052995085106013806
+      }
+    },
+    "Ridge regression": {
+      "cv_mae": 0.06882068102750241,
+      "best_params": {
+        "alpha": 1000.0
+      },
+      "test": {
+        "mae": 0.07206848648379977,
+        "rmse": 0.09234895741891852,
+        "r2": 0.18595456376585884
+      }
+    },
+    "Random forest": {
+      "cv_mae": 0.0785875580768309,
+      "best_params": {
+        "max_depth": 4,
+        "min_samples_leaf": 5
+      },
+      "test": {
+        "mae": 0.07590887138311986,
+        "rmse": 0.09517928074032152,
+        "r2": 0.13529197524488656
+      }
+    },
+    "XGBoost": {
+      "cv_mae": 0.07634516778280633,
+      "best_params": {
+        "learning_rate": 0.03,
+        "max_depth": 2,
+        "min_child_weight": 5
+      },
+      "test": {
+        "mae": 0.06854772052500017,
+        "rmse": 0.088977278178261,
+        "r2": 0.24431137458136243
+      }
+    }
+  },
+  "chosen": "Ridge regression",
+  "feature_importance": {
+    "save_pct": 0.0009582303058299462,
+    "shooting_pct_weighted": 0.0006332966224683434,
+    "pp_pct_weighted": 0.0005729157555716735,
+    "pk_pct_weighted": 0.0004494926873193306,
+    "pk_pct": 0.00042333835284462384,
+    "attempt_share": 0.000299763926744287,
+    "points_pct_weighted": 0.00012148400041828156,
+    "shooting_pct": 9.14548938324794e-05,
+    "sat_pct_5v5": 6.0541525548410416e-05,
+    "pp_pct": 1.7924795083537616e-05,
+    "games_counted": 1.390745551279604e-05,
+    "attempt_share_weighted": 1.2424365055863085e-05,
+    "sat_pct_5v5_weighted": -4.903036599132049e-05,
+    "shot_share_weighted": -0.00011792454996707446,
+    "shot_share": -0.00025575748973011845,
+    "prior_points_pct": -0.0003112024518726525,
+    "points_pct": -0.0004103480093560319,
+    "save_pct_weighted": -0.0004186293264065055,
+    "goal_share_weighted": -0.0004814146141582015,
+    "goal_share": -0.0005568835395994787
+  }
+}

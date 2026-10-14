@@ -157,8 +157,60 @@ CREATE TABLE IF NOT EXISTS team_game_special_teams (
     FOREIGN KEY (team_abbrev) REFERENCES teams(team_abbrev)
 );
 
+-- One row per team per regular-season game, from the NHL stats API: the
+-- team ratings model's input (src/models/team_ratings.py). goals_for /
+-- goals_against count a shootout winner as a goal, like the standings do.
+CREATE TABLE IF NOT EXISTS team_games (
+    game_id INTEGER NOT NULL,
+    team_abbrev TEXT NOT NULL,
+    opponent_abbrev TEXT,
+    season INTEGER,
+    game_date TEXT,
+    home_road TEXT,              -- 'H' or 'R'
+    points INTEGER,              -- standings points earned: 0, 1 or 2
+    goals_for INTEGER,
+    goals_against INTEGER,
+    shots_for INTEGER,
+    shots_against INTEGER,
+    shot_attempts_for INTEGER,   -- shots + missed + blocked, all situations
+    shot_attempts_against INTEGER,
+    sat_pct_5v5 REAL,            -- share of 5-on-5 shot attempts, fraction
+    shooting_pct_5v5 REAL,
+    save_pct_5v5 REAL,
+    PRIMARY KEY (game_id, team_abbrev),
+    FOREIGN KEY (team_abbrev) REFERENCES teams(team_abbrev)
+);
+
+-- One row per skater per regular-season game, from the NHL stats API: the
+-- player ratings model's input (src/models/player_ratings.py). Times are
+-- seconds; ev/pp/sh = even strength, power play, shorthanded.
+CREATE TABLE IF NOT EXISTS player_games (
+    player_id INTEGER NOT NULL,
+    game_id INTEGER NOT NULL,
+    season INTEGER,
+    game_date TEXT,
+    team_abbrev TEXT,
+    opponent_abbrev TEXT,
+    player_name TEXT,
+    position_code TEXT,          -- C, L, R or D
+    goals INTEGER,
+    assists INTEGER,
+    points INTEGER,
+    pp_points INTEGER,
+    shots INTEGER,
+    toi_seconds INTEGER,
+    ev_toi_seconds INTEGER,
+    pp_toi_seconds INTEGER,
+    sh_toi_seconds INTEGER,
+    shifts INTEGER,
+    PRIMARY KEY (player_id, game_id),
+    FOREIGN KEY (team_abbrev) REFERENCES teams(team_abbrev)
+);
+
 CREATE INDEX IF NOT EXISTS idx_games_home_team ON games(home_team);
 CREATE INDEX IF NOT EXISTS idx_games_away_team ON games(away_team);
 CREATE INDEX IF NOT EXISTS idx_games_date ON games(game_date);
 CREATE INDEX IF NOT EXISTS idx_players_season ON players(season);
 CREATE INDEX IF NOT EXISTS idx_standings_season ON standings(season_id);
+CREATE INDEX IF NOT EXISTS idx_team_games_season ON team_games(season);
+CREATE INDEX IF NOT EXISTS idx_player_games_season ON player_games(season);

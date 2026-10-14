@@ -80,10 +80,18 @@ def load_team_season_stats() -> int:
 
 
 def load_games() -> int:
-    """Load the games files into the games table."""
+    """Load the games files into the games table, skipping exhibition games
+    against non-NHL clubs (e.g. a 2024 preseason game at "MUN", Munich) --
+    they have no row in teams to reference."""
     df = read_all_seasons("games")  # already snake_case, matches schema directly
     with get_connection() as conn:
-        return upsert_dataframe(conn, "games", df, pk_columns=["game_id"])
+        nhl_teams = {row[0] for row in conn.execute("SELECT team_abbrev FROM teams")}
+        is_nhl = df["home_team"].isin(nhl_teams) & df["away_team"].isin(nhl_teams)
+        if not is_nhl.all():
+            skipped = df.loc[~is_nhl, ["game_id", "away_team", "home_team"]]
+            logger.info("Skipping %d game(s) against non-NHL teams: %s",
+                        len(skipped), skipped.to_dict("records"))
+        return upsert_dataframe(conn, "games", df[is_nhl], pk_columns=["game_id"])
 
 
 def load_players() -> int:
@@ -136,6 +144,17 @@ def load_players() -> int:
 
     players = df.rename(columns=available)[list(available.values())]
 
+    # club-stats occasionally lists a player twice for one team and season
+    # (seen: Matthew Phillips, WSH 2023-24, 27 games and 1 game) -- keep the
+    # entry with more games.
+    key = ["player_id", "team_abbrev", "season"]
+    duplicated = players.duplicated(subset=key, keep=False)
+    if duplicated.any():
+        logger.warning("Keeping the larger of duplicate player entries: %s",
+                       players.loc[duplicated, key + ["games_played"]].to_dict("records"))
+        players = (players.sort_values("games_played", ascending=False)
+                   .drop_duplicates(subset=key).sort_index())
+
     with get_connection() as conn:
         return upsert_dataframe(
             conn, "players", players, pk_columns=["player_id", "team_abbrev", "season"]
@@ -149,6 +168,20 @@ def load_special_teams_games() -> int:
         return upsert_dataframe(conn, "team_game_special_teams", df, pk_columns=["game_id", "team_abbrev"])
 
 
+def load_team_games() -> int:
+    """Load the team_games files into the team_games table."""
+    df = read_all_seasons("team_games")  # already snake_case, matches schema directly
+    with get_connection() as conn:
+        return upsert_dataframe(conn, "team_games", df, pk_columns=["game_id", "team_abbrev"])
+
+
+def load_player_games() -> int:
+    """Load the player_games files into the player_games table."""
+    df = read_all_seasons("player_games")  # already snake_case, matches schema directly
+    with get_connection() as conn:
+        return upsert_dataframe(conn, "player_games", df, pk_columns=["player_id", "game_id"])
+
+
 def load_all() -> dict[str, int]:
     """Run every importer in dependency order (teams before anything referencing them)."""
     results = {}
@@ -158,4 +191,6 @@ def load_all() -> dict[str, int]:
     results["games"] = load_games()
     results["players"] = load_players()
     results["team_game_special_teams"] = load_special_teams_games()
+    results["team_games"] = load_team_games()
+    results["player_games"] = load_player_games()
     return results

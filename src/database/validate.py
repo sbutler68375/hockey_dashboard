@@ -18,6 +18,8 @@ TABLE_PKS = {
     "games": ["game_id"],
     "players": ["player_id", "team_abbrev", "season"],
     "team_game_special_teams": ["game_id", "team_abbrev"],
+    "team_games": ["game_id", "team_abbrev"],
+    "player_games": ["player_id", "game_id"],
 }
 
 

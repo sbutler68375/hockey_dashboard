@@ -20,7 +20,7 @@ from dashboard.data import (
 )
 from dashboard.style import apply_theme, card, result_style, section_label
 
-st.set_page_config(page_title="Season Games", page_icon="🏒", layout="wide")
+st.set_page_config(page_title="Season Games", page_icon="🏒", layout="wide", initial_sidebar_state="expanded")
 apply_theme()
 season = page_header("Season Games")
 

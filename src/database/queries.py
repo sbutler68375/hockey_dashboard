@@ -114,3 +114,58 @@ def get_completed_games(game_type: int | None = 2, season: int | None = None) ->
 
     with get_connection() as conn:
         return pd.read_sql_query(query, conn, params=params)
+
+
+def get_all_team_games() -> pd.DataFrame:
+    """Return every collected season's per-team game stats, oldest first --
+    the team ratings model's training and scoring data."""
+    with get_connection() as conn:
+        return pd.read_sql_query(
+            "SELECT * FROM team_games ORDER BY season, game_date, game_id", conn
+        )
+
+
+def get_all_player_games() -> pd.DataFrame:
+    """Return every collected season's per-skater game stats, oldest first --
+    the player ratings model's training and scoring data."""
+    with get_connection() as conn:
+        return pd.read_sql_query(
+            "SELECT * FROM player_games ORDER BY season, game_date, game_id", conn
+        )
+
+
+def _ratings_query(table: str, sql: str, params: list) -> pd.DataFrame:
+    """Run sql against a ratings table (written by scripts/build_ratings.py).
+    Empty if the ratings haven't been built yet -- the table doesn't exist
+    until then."""
+    with get_connection() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [table]
+        ).fetchone()
+        if not exists:
+            return pd.DataFrame()
+        return pd.read_sql_query(sql, conn, params=params)
+
+
+def get_team_ratings(season: int) -> pd.DataFrame:
+    """Every team's model rating for one season, best expected first."""
+    return _ratings_query(
+        "team_ratings", "SELECT * FROM team_ratings WHERE season = ? ORDER BY model_rank", [season]
+    )
+
+
+def get_team_rating_history(team_abbrev: str, season: int) -> pd.DataFrame:
+    """One team's expected vs actual points % after every game, oldest first."""
+    return _ratings_query(
+        "team_rating_history", "SELECT * FROM team_rating_history WHERE team_abbrev = ? AND season = ? "
+        "ORDER BY games_played",
+        [team_abbrev, season],
+    )
+
+
+def get_player_ratings(season: int) -> pd.DataFrame:
+    """Every skater's model rating for one season, best expected first."""
+    return _ratings_query(
+        "player_ratings", "SELECT * FROM player_ratings WHERE season = ? ORDER BY expected_points_per_game DESC",
+        [season],
+    )

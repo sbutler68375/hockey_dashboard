@@ -43,9 +43,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.api.client import NHLApiError
 from src.api.nhl import get_team_season_schedule
-from src.utils.constants import CURRENT_SEASON, TEAM_ABBREVIATIONS
+from src.utils.constants import CURRENT_SEASON
 from src.utils.logging_config import get_logger
-from src.utils.raw_data import save_season_csv, seasons_to_collect
+from src.utils.raw_data import save_season_csv, season_team_abbrevs, seasons_to_collect
 
 logger = get_logger(__name__)
 
@@ -70,8 +70,9 @@ GAME_COLUMNS = {
 def collect_games(season: str = CURRENT_SEASON) -> pd.DataFrame:
     """Fetch every team's season schedule and dedupe into one games table."""
     frames = []
-    for i, team in enumerate(TEAM_ABBREVIATIONS, start=1):
-        logger.info("[%d/%d] Fetching schedule for %s...", i, len(TEAM_ABBREVIATIONS), team)
+    teams = season_team_abbrevs(season)
+    for i, team in enumerate(teams, start=1):
+        logger.info("[%d/%d] Fetching schedule for %s...", i, len(teams), team)
         try:
             games = get_team_season_schedule(team, season)
         except NHLApiError as exc:

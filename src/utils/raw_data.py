@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.utils.constants import COLLECTED_SEASONS, CURRENT_SEASON
+from src.utils.constants import COLLECTED_SEASONS, CURRENT_SEASON, TEAM_ABBREVIATIONS
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -35,6 +35,17 @@ def seasons_to_collect(dataset: str) -> list[str]:
             continue
         seasons.append(season)
     return seasons
+
+
+def season_team_abbrevs(season: str) -> list[str]:
+    """The teams that played in a season, from its standings file -- so a
+    past season gets the franchises of its time (e.g. ARI in 2023-24, not
+    UTA). Falls back to today's 32 teams if standings aren't collected yet;
+    collect_teams.py writes standings before anything that needs this."""
+    path = season_csv_path("standings", season)
+    if path.exists():
+        return sorted(pd.read_csv(path)["teamAbbrev.default"].dropna().unique())
+    return list(TEAM_ABBREVIATIONS)
 
 
 def save_season_csv(df: pd.DataFrame, dataset: str, season: str) -> None:

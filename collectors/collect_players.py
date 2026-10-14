@@ -32,9 +32,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.api.client import NHLApiError
 from src.api.nhl import get_team_roster, get_team_stats
-from src.utils.constants import CURRENT_SEASON, GAME_TYPE_REGULAR_SEASON, TEAM_ABBREVIATIONS
+from src.utils.constants import CURRENT_SEASON, GAME_TYPE_REGULAR_SEASON
 from src.utils.logging_config import get_logger
-from src.utils.raw_data import save_season_csv, seasons_to_collect
+from src.utils.raw_data import save_season_csv, season_team_abbrevs, seasons_to_collect
 
 logger = get_logger(__name__)
 
@@ -83,7 +83,13 @@ def _team_player_stats(team_abbrev: str, season: str) -> pd.DataFrame:
     combined["team_abbrev"] = team_abbrev
     combined["season"] = season
 
-    bio = _roster_bio_frame(team_abbrev)
+    try:
+        bio = _roster_bio_frame(team_abbrev)
+    except NHLApiError as exc:
+        # e.g. a relocated franchise (ARI) has no current roster -- keep the
+        # stats, just without bio fields.
+        logger.warning("No current roster for %s (%s) -- bio fields left empty.", team_abbrev, exc)
+        bio = pd.DataFrame(columns=["playerId", *BIO_COLUMNS])
     merged = combined.merge(bio, on="playerId", how="left")
 
     unmatched = merged["heightInCentimeters"].isna().sum() if "heightInCentimeters" in merged else len(merged)
@@ -100,8 +106,9 @@ def _team_player_stats(team_abbrev: str, season: str) -> pd.DataFrame:
 def collect_player_stats(season: str = CURRENT_SEASON) -> pd.DataFrame:
     """Fetch and combine player season stats for every team."""
     frames = []
-    for i, team in enumerate(TEAM_ABBREVIATIONS, start=1):
-        logger.info("[%d/%d] Fetching player stats for %s...", i, len(TEAM_ABBREVIATIONS), team)
+    teams = season_team_abbrevs(season)
+    for i, team in enumerate(teams, start=1):
+        logger.info("[%d/%d] Fetching player stats for %s...", i, len(teams), team)
         try:
             frame = _team_player_stats(team, season)
             if not frame.empty:

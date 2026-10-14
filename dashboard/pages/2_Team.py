@@ -1,5 +1,7 @@
-"""Per-team profile: season totals, standings position, and a rolling
-win-percentage trend chart over the season."""
+"""Per-team profile: model rating, season totals, standings position, and a
+rolling win-percentage trend chart over the season. With no team picked,
+the league-wide model ratings: who's overrated, underrated, and playing
+better or worse lately (src/models/team_ratings.py)."""
 
 import sys
 from pathlib import Path
@@ -15,6 +17,8 @@ from dashboard.data import (
     load_completed_games,
     load_player_stats,
     load_standings,
+    load_team_rating_history,
+    load_team_ratings,
     load_team_season_stats,
     load_team_special_teams_games,
     page_header,
@@ -23,8 +27,10 @@ from dashboard.data import (
     team_results,
 )
 from dashboard.images import player_headshot_url, team_logo_url
+from dashboard.ratings import model_explainer, ordinal, verdict_style
 from dashboard.style import apply_theme, card, colors, result_style, section_label, style_chart
 from src.features.team_form import add_rolling_form_features, build_team_game_log
+from src.models import team_ratings as team_model
 
 # Form chart settings.
 FORM_WINDOW = 10           # games per rolling win % point
@@ -103,13 +109,149 @@ def special_teams_chart(per_game: pd.DataFrame, successes: pd.Series, chances: p
     fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0))
     return style_chart(fig), note
 
-st.set_page_config(page_title="Team", page_icon="🏒", layout="wide")
+# PDO (shooting % + save %) this far from the league average reads as luck
+# running hot/cold -- about 1.5 percentage points between the two.
+PDO_LUCK_BAND = 0.015
+# Before this many games, ratings still lean on last season.
+EARLY_SEASON_GAMES = 20
+
+MODEL_PREDICTS = "each team's points % over the rest of the season"
+
+
+def explain_rating(r: pd.Series) -> list[str]:
+    """Plain-language reasons behind one team's rating, one sentence each."""
+    standings, model = ordinal(int(r["standings_rank"])), ordinal(int(r["model_rank"]))
+    if r["verdict"] == "Overrated":
+        lines = [f"**Overrated:** {standings} in the standings but {model} by the model -- "
+                 "their record is ahead of how they've played."]
+    elif r["verdict"] == "Underrated":
+        lines = [f"**Underrated:** {standings} in the standings but {model} by the model -- "
+                 "they've played better than their record shows."]
+    else:
+        lines = [f"**Fairly rated:** {standings} in the standings, {model} by the model -- "
+                 "their record matches how they've played."]
+    pdo_gap = r["pdo"] - r["league_pdo"]
+    if pdo_gap >= PDO_LUCK_BAND:
+        lines.append(f"Shooting % + save % (PDO) is {r['pdo']:.3f} vs a league average of "
+                     f"{r['league_pdo']:.3f} -- running hot, which usually cools off.")
+    elif pdo_gap <= -PDO_LUCK_BAND:
+        lines.append(f"Shooting % + save % (PDO) is {r['pdo']:.3f} vs a league average of "
+                     f"{r['league_pdo']:.3f} -- running cold, which usually bounces back.")
+    if r["trend"] == "Playing better":
+        lines.append(f"**Playing better lately:** the model rates their last 10 games {abs(r['form_change']):.3f} "
+                     f"PT% above their season as a whole ({r['recent_points_pct']:.3f} PT% in those games).")
+    elif r["trend"] == "Playing worse":
+        lines.append(f"**Playing worse lately:** the model rates their last 10 games {abs(r['form_change']):.3f} "
+                     f"PT% below their season as a whole ({r['recent_points_pct']:.3f} PT% in those games).")
+    if r["games_played"] < EARLY_SEASON_GAMES and pd.notna(r["prior_points_pct"]):
+        lines.append(f"Early season: after {int(r['games_played'])} games the rating still leans on "
+                     f"last season ({r['prior_points_pct']:.3f} PT%) and firms up as games are played.")
+    return lines
+
+
+def ratings_table(df: pd.DataFrame, columns: dict) -> None:
+    """A ratings table with team logos and colored verdict/trend words."""
+    df = df.assign(logo=df["team_abbrev"].map(team_logo_url), trend=df["trend"].fillna("—"))
+    style_cols = [c for c in ("verdict", "trend") if c in columns]
+    st.dataframe(
+        df[["logo", *columns]].style.map(verdict_style, subset=style_cols),
+        column_config={"logo": st.column_config.ImageColumn(""), **columns},
+        hide_index=True, width="stretch",
+    )
+
+
+def league_ratings(ratings: pd.DataFrame) -> None:
+    """The no-team-picked view: every team's model rating."""
+    if ratings.empty:
+        st.info("No model ratings yet -- go to Home and click 'Refresh all data'.")
+        return
+    pct = lambda label: st.column_config.NumberColumn(label, format="%.3f")
+    if ratings["games_played"].median() < EARLY_SEASON_GAMES:
+        st.caption(f"Early season: with about {int(ratings['games_played'].median())} games played, "
+                   "ratings still lean on last season and firm up as games are played.")
+
+    with card("ratings_overview"):
+        section_label("Record vs how they've played")
+        fig = go.Figure()
+        # Fit the x-axis to the expected values -- actual records spread much
+        # wider early in a season and would squeeze the teams into a clump.
+        low = ratings["expected_points_pct"].min() - 0.02
+        high = ratings["expected_points_pct"].max() + 0.02
+        fig.add_scatter(x=[low, high], y=[low, high], mode="lines", hoverinfo="skip",
+                        line=dict(color=colors()["text_muted"], dash="dot", width=1), showlegend=False)
+        fig.add_scatter(
+            x=ratings["expected_points_pct"], y=ratings["points_pct"], mode="markers+text",
+            text=ratings["team_abbrev"], textposition="top center", textfont=dict(size=11),
+            showlegend=False, marker=dict(color=colors()["accent"], size=9),
+            hovertemplate="%{text}<br>Expected %{x:.3f}<br>Actual %{y:.3f}<extra></extra>",
+        )
+        fig.update_xaxes(title="Expected points % (model)", tickformat=".3f", range=[low, high])
+        fig.update_yaxes(title="Actual points %", tickformat=".3f")
+        fig.update_layout(height=520)
+        st.plotly_chart(style_chart(fig), width="stretch")
+        st.caption("Above the dotted line: a better record than their play suggests. "
+                   "Below it: they've played better than their record.")
+
+    columns = {
+        "team_abbrev": "Team", "standings_rank": "Standings rank", "model_rank": "Model rank",
+        "points_pct": pct("PT%"), "expected_points_pct": pct("Expected PT%"),
+    }
+    with card("verdicts"):
+        section_label("Overrated and underrated")
+        over_col, under_col = st.columns(2, gap="large")
+        for col, verdict, sort_ascending, empty in [
+            (over_col, "Overrated", False, "No team's record is far ahead of its play."),
+            (under_col, "Underrated", True, "No team's record is far behind its play."),
+        ]:
+            with col:
+                st.markdown(f"##### {verdict}")
+                rows = ratings[ratings["verdict"] == verdict].sort_values("rank_gap", ascending=sort_ascending)
+                if rows.empty:
+                    st.caption(empty)
+                else:
+                    ratings_table(rows, columns)
+        st.caption(f"Overrated / underrated: {team_model.OVERRATED_RANK_GAP}+ places apart in "
+                   "the standings and the model's ranking.")
+
+    with card("trends"):
+        section_label("Playing better and worse lately")
+        if ratings["trend"].isna().all():
+            st.caption(f"Shows up once teams have played {2 * team_model.RECENT_GAMES} games.")
+        else:
+            better_col, worse_col = st.columns(2, gap="large")
+            change = {"form_change": st.column_config.NumberColumn("Last 10 vs season", format="%+.3f"),
+                      "recent_points_pct": pct("PT% last 10")}
+            for col, trend, sort_ascending in [(better_col, "Playing better", False),
+                                               (worse_col, "Playing worse", True)]:
+                with col:
+                    st.markdown(f"##### {trend}")
+                    rows = ratings[ratings["trend"] == trend].sort_values("form_change", ascending=sort_ascending)
+                    if rows.empty:
+                        st.caption("No team right now.")
+                    else:
+                        ratings_table(rows, {"team_abbrev": "Team", **change})
+            st.caption("How the model rates each team's last 10 games compared with its season as a whole.")
+
+    with card("all_team_ratings"):
+        section_label("All teams, by model rank")
+        ratings_table(ratings, {
+            **columns, "verdict": "Verdict", "trend": "Lately",
+            "pdo": st.column_config.NumberColumn("PDO", format="%.3f",
+                                                 help="Shooting % + save %. Far from 1.000 usually means luck."),
+            "games_played": "GP",
+        })
+        model_explainer(team_model.SPEC.name, MODEL_PREDICTS, team_model.FEATURE_LABELS)
+
+
+st.set_page_config(page_title="Team", page_icon="🏒", layout="wide", initial_sidebar_state="expanded")
 apply_theme()
 season = page_header("Team")
 
 team = selected_team()
+ratings = load_team_ratings(season)
 if team is None:
-    st.info("Choose a team with the logo button in the top-right corner to see its profile.")
+    st.caption("Choose a team with the logo button in the top-right corner to see its full profile.")
+    league_ratings(ratings)
     st.stop()
 
 standings = load_standings(season)
@@ -137,6 +279,40 @@ with card("team_header"):
     c3.metric("Goals For", int(row["goal_for"]))
     c4.metric("Goals Against", int(row["goal_against"]))
     c5.metric("Streak", f"{row.get('streak_code', '')}{row.get('streak_count', '')}")
+
+team_rating = ratings[ratings["team_abbrev"] == team] if not ratings.empty else ratings
+with card("model_rating"):
+    section_label("Model rating")
+    if team_rating.empty:
+        st.caption(f"Rated after {team_model.MIN_GAMES} games -- check back soon."
+                   if not ratings.empty else "No model ratings yet -- go to Home and click 'Refresh all data'.")
+    else:
+        r = team_rating.iloc[0]
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Expected PT%", f"{r['expected_points_pct']:.3f}", f"{ordinal(int(r['model_rank']))} by the model",
+                  delta_color="off", delta_arrow="off")
+        m2.metric("Actual PT%", f"{r['points_pct']:.3f}", f"{ordinal(int(r['standings_rank']))} in the standings",
+                  delta_color="off", delta_arrow="off")
+        m3.metric("Verdict", r["verdict"])
+        m4.metric("Lately", r["trend"] or "After 20 games")
+        for line in explain_rating(r):
+            st.markdown(line)
+
+        history = load_team_rating_history(team, season)
+        if len(history) > 1:
+            fig = go.Figure()
+            fig.add_scatter(x=history["games_played"], y=history["expected_points_pct"], mode="lines",
+                            name="Expected PT% (model)", line=dict(color=colors()["accent"], width=2),
+                            hovertemplate="Game %{x}<br>Expected %{y:.3f}<extra></extra>")
+            fig.add_scatter(x=history["games_played"], y=history["points_pct"], mode="lines",
+                            name="Actual PT% so far", line=dict(color=colors()["text_muted"], dash="dot", width=2),
+                            hovertemplate="Game %{x}<br>Actual %{y:.3f}<extra></extra>")
+            fig.update_xaxes(title="Game #")
+            fig.update_yaxes(title="Points %", tickformat=".3f")
+            fig.update_layout(height=320, legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0))
+            st.plotly_chart(style_chart(fig), width="stretch")
+            st.caption("How the model's view of the team changed after each game, next to its actual record.")
+    model_explainer(team_model.SPEC.name, MODEL_PREDICTS, team_model.FEATURE_LABELS)
 
 if not team_season.empty:
     with card("season_totals"):
@@ -172,7 +348,7 @@ if not team_season.empty:
                 rank_text = f"{rank}{suffix} of {ranks.notna().sum()} in NHL"
                 recent_chances = chances.tail(FORM_WINDOW).sum()
                 last_10 = successes.tail(FORM_WINDOW).sum() / recent_chances if recent_chances else None
-                with col:
+                with col, st.container(key=f"special_{column}"):
                     if has_trend and last_10 is not None:
                         change = last_10 - ts[column]
                         # One card: last 10 games (big, with the arrow vs the season) on
@@ -225,7 +401,7 @@ else:
         fig = go.Figure()
         hover = "Game %{x} (%{customdata[0]}, vs %{customdata[1]})<br>%{y:.0%}<extra></extra>"
         if not full.empty:
-            st.markdown(f"###### Win % over the last {FORM_WINDOW} games, {team}")
+            st.markdown(f"##### Win % over the last {FORM_WINDOW} games, {team}")
             fig.add_scatter(
                 x=full["game_number"], y=full["form"], mode="lines+markers",
                 name=f"{FORM_WINDOW}-game win %", line=dict(color=colors()["accent"], width=2),
@@ -237,7 +413,7 @@ else:
         else:
             # Too early in the season for a 10-game average -- show the
             # running season win % instead.
-            st.markdown(f"###### Win % so far, {team}")
+            st.markdown(f"##### Win % so far, {team}")
             fig.add_scatter(
                 x=form_df["game_number"], y=form_df["win"].expanding().mean(), mode="lines+markers",
                 name="Win % so far", line=dict(color=colors()["accent"], width=2),
@@ -387,7 +563,6 @@ else:
                         )
 
             st.caption(
-                "Player numbers are season totals, not recent-game trends -- this "
-                "project only collects per-season player stats, not per-game logs, "
-                "so a true 'hot streak' isn't buildable at the player level yet."
+                "Season totals. For who's playing better or worse lately, see the "
+                "model ratings on the Players page."
             )

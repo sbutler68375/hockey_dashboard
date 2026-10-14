@@ -1,16 +1,16 @@
 """Shared visual design system for the dashboard.
 
 Design direction: a restrained "professional analytics product"
-look, in a dark and a light theme (closer to a modern data/SaaS dashboard than a hockey video game)
+look in a light theme (closer to a modern data/SaaS dashboard than a hockey video game)
 -- clean cards, a single muted accent color, crisp sans-serif type for
 UI text and a monospace face reserved for numeric data, and small
 transitions rather than glow/animation. Paired with
-.streamlit/config.toml, whose [theme.dark] / [theme.light] sections set the
-colors Streamlit's own widgets, buttons, and dataframes read directly; the
-palettes below must match them.
+.streamlit/config.toml, whose [theme] section sets the colors Streamlit's
+own widgets, buttons, and dataframes read directly; the palette below must
+match it.
 
 Call apply_theme() once per page, right after st.set_page_config().
-Use colors() for the active theme's palette in page code, and
+Use colors() for the palette in page code, and
 style_chart(fig) on every Plotly figure so charts share the same
 palette instead of Plotly's default colors. Wrap each section in
 `with card(name):` and use section_label(text) for the heading that introduces a card/section.
@@ -25,47 +25,26 @@ import re
 
 import streamlit as st
 
-# One palette per theme. Page code reads the active one with colors() for
-# anything CSS can't reach (e.g. a chart line color).
-PALETTES = {
-    "dark": {
-        "bg": "#0a0d12",
-        "panel": "#12161d",
-        "panel_alt": "#171c24",
-        "border": "rgba(255, 255, 255, 0.08)",
-        "border_strong": "rgba(255, 255, 255, 0.16)",
-        "text": "#e6e9ee",
-        "text_muted": "#8892a0",
-        "accent": "#3b82f6",
-        "positive": "#22c55e",
-        "negative": "#ef4444",
-        "warning": "#f59e0b",
-    },
-    "light": {
-        "bg": "#eef1f5",
-        "panel": "#ffffff",
-        "panel_alt": "#ffffff",
-        "border": "rgba(15, 23, 42, 0.10)",
-        "border_strong": "rgba(15, 23, 42, 0.20)",
-        "text": "#111827",
-        "text_muted": "#5b6472",
-        "accent": "#2563eb",
-        "positive": "#16a34a",
-        "negative": "#dc2626",
-        "warning": "#d97706",
-    },
+# Page code reads this with colors() for anything CSS can't reach (e.g. a
+# chart line color).
+PALETTE = {
+    "bg": "#eef1f5",
+    "panel": "#ffffff",
+    "panel_alt": "#ffffff",
+    "border": "rgba(15, 23, 42, 0.10)",
+    "border_strong": "rgba(15, 23, 42, 0.20)",
+    "text": "#111827",
+    "text_muted": "#5b6472",
+    "accent": "#2563eb",
+    "positive": "#16a34a",
+    "negative": "#dc2626",
+    "warning": "#d97706",
 }
 
 
-def theme_type() -> str:
-    """'light' or 'dark' -- the theme this viewer's browser is showing
-    (dark until the browser has reported one)."""
-    return "light" if st.context.theme.type == "light" else "dark"
-
-
 def colors() -> dict[str, str]:
-    """The active theme's palette."""
-    return PALETTES[theme_type()]
+    """The dashboard's color palette."""
+    return PALETTE
 
 FONT_FAMILY = "'Inter', -apple-system, 'Segoe UI', sans-serif"
 MONO_FAMILY = "'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace"
@@ -183,7 +162,7 @@ div[class*="st-key-card_"] {{
 }}
 
 /* Filter controls -- labels and dropdowns styled to read as obvious,
-   clickable controls rather than blending into the dark cards. */
+   clickable controls rather than blending into the cards. */
 div[data-testid="stWidgetLabel"] p {{
     font-size: 0.8rem !important;
     font-weight: 600 !important;
@@ -250,6 +229,41 @@ div[data-testid="stDataFrame"] {{
 hr {{
     border-color: {c["border"]} !important;
     margin: 1.4rem 0 !important;
+}}
+
+/* Team page special teams: the main "Power play %" / "Penalty kill %"
+   labels bold and a bit bigger; the smaller "Season" label beside them
+   keeps the normal metric label look. The label is a <label> element in
+   Streamlit 1.65 (so not matched by the div[...stMetricLabel] rules above). */
+div[class*="st-key-special_"] [data-testid="stMetricLabel"] p {{
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+}}
+div[class*="st-key-special_"] div[class*="st-key-metric_secondary_"] [data-testid="stMetricLabel"] p {{
+    font-size: 0.875rem !important;
+    font-weight: 400 !important;
+}}
+
+/* Header season picker (segmented control, key _season_picker in
+   dashboard/data.py): the selected season is a solid accent button, like
+   the active view button on Standings, so it reads as clearly chosen. */
+.st-key-_season_picker button {{
+    font-weight: 600 !important;
+}}
+.st-key-_season_picker button[aria-checked="true"] {{
+    background-color: {c["accent"]} !important;
+    border-color: {c["accent"]} !important;
+    color: #ffffff !important;
+}}
+.st-key-_season_picker button[aria-checked="true"] p {{
+    color: #ffffff !important;
+}}
+
+/* Sidebar always open: pages start it expanded (initial_sidebar_state in
+   st.set_page_config) and these hide the buttons that collapse/reopen it. */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stExpandSidebarButton"] {{
+    display: none !important;
 }}
 </style>
 """

@@ -29,13 +29,19 @@ TEAM_ABBREVIATIONS = [
 # the new season's regular season is underway.
 CURRENT_SEASON = "20262027"
 
-# Completed seasons that are still collected: their games serve as model
-# training history, and the dashboard's season toggle can switch to them
-# (final standings, team totals, player stats, game results).
-HISTORICAL_SEASONS = ["20252026"]
+# Completed seasons that are still collected, oldest first: their games
+# serve as model training history (src/models/), and the dashboard's
+# season picker switches to the most recent one (final standings, team
+# totals, player stats, game results).
+HISTORICAL_SEASONS = ["20232024", "20242025", "20252026"]
 
 # Every season that gets collected (historical + current), oldest first.
 COLLECTED_SEASONS = [*HISTORICAL_SEASONS, CURRENT_SEASON]
+
+# Relocated franchises: current abbreviation -> the one it played under
+# before. Arizona (ARI) became Utah (UTA) in 2024-25 -- used to carry a
+# team's previous season over into the next (src/models/team_ratings.py).
+FRANCHISE_PREDECESSORS = {"UTA": "ARI"}
 
 # NHL API gameType codes, as seen in schedule/club-schedule-season responses.
 GAME_TYPE_PRESEASON = 1

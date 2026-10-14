@@ -80,12 +80,36 @@ def get_team_summaries(season: str, game_type: int) -> list[dict[str, Any]]:
 def get_team_game_reports(report: str, season: str, game_type: int) -> list[dict[str, Any]]:
     """Return one row per team per game from a stats API team report.
 
-    report is "powerplay" (ppGoalsFor, ppOpportunities) or "penaltykill"
-    (ppGoalsAgainst, timesShorthanded); every row has teamId and gameDate.
+    report is e.g. "powerplay" (ppGoalsFor, ppOpportunities), "penaltykill"
+    (ppGoalsAgainst, timesShorthanded), "summary" (goalsFor/Against,
+    shotsFor/AgainstPerGame -- for one game, just that game's shots --
+    and points earned), "realtime" (totalShotAttempts) or "percentages"
+    (satPct, shootingPct5v5, savePct5v5). Every row has teamId, gameId and
+    gameDate (all verified live 2026-10-13).
     """
     url = (
         f"{NHL_STATS_API_BASE}/team/{report}?isAggregate=false&isGame=true&limit=-1"
         f"&cayenneExp=seasonId={season}%20and%20gameTypeId={game_type}"
     )
     data = get_json(url)
+    return data.get("data", [])
+
+
+def get_skater_game_reports(report: str, season: str, game_type: int,
+                            start_date: str, end_date: str) -> list[dict[str, Any]]:
+    """Return one row per skater per game from a stats API skater report, for
+    games on start_date <= gameDate < end_date (YYYY-MM-DD).
+
+    report is "summary" (goals, assists, points, shots, ppPoints) or
+    "timeonice" (timeOnIce, ppTimeOnIce, shTimeOnIce, evTimeOnIce, shifts --
+    seconds); every row has playerId, gameId, gameDate and teamAbbrev
+    (verified live 2026-10-13). A full season is ~48,000 rows (~25 MB), so
+    callers fetch it a date range at a time.
+    """
+    url = (
+        f"{NHL_STATS_API_BASE}/skater/{report}?isAggregate=false&isGame=true&limit=-1"
+        f"&cayenneExp=seasonId={season}%20and%20gameTypeId={game_type}"
+        f"%20and%20gameDate%3E=%22{start_date}%22%20and%20gameDate%3C%22{end_date}%22"
+    )
+    data = get_json(url, timeout=90)
     return data.get("data", [])

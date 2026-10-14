@@ -11,10 +11,10 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dashboard.data import page_header, refresh_all_data
+from dashboard.data import format_refresh_time, last_refreshed, page_header, refresh_all_data
 from dashboard.style import apply_theme
 
-st.set_page_config(page_title="SESPN", page_icon="🏒", layout="wide")
+st.set_page_config(page_title="SESPN", page_icon="🏒", layout="wide", initial_sidebar_state="expanded")
 apply_theme()
 
 page_header("SESPN")
@@ -46,6 +46,11 @@ with st.sidebar:
                 st.success(line)
         if all(line.startswith("OK") for line in log):
             st.rerun()
+    refreshed_at = last_refreshed()
+    st.markdown(
+        f"**Last refreshed:** {format_refresh_time(refreshed_at)}"
+        if refreshed_at else "**Last refreshed:** never"
+    )
     st.caption(
         "Pulls fresh data from the NHL API and rebuilds the database. "
         "Takes about 1-2 minutes."

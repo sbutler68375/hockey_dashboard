@@ -7,6 +7,10 @@ Produces, per season:
                                          plus power-play % and penalty-kill %
     data/raw/special_teams_games_<season>.csv -- one row per team per game: power-play
                                          goals/chances and penalty-kill chances/goals against
+    data/raw/team_games_<season>.csv  -- one row per team per game: goals, shots and shot
+                                         attempts for and against, 5-on-5 shot-attempt share
+                                         and shooting/save %, standings points earned (input
+                                         to the team ratings model, src/models/team_ratings.py)
 
 Historical seasons are only fetched once (they're complete and never
 change) -- see src/utils/raw_data.py. Each refresh re-fetches the
@@ -40,9 +44,9 @@ from src.api.nhl import (
     get_team_stats,
     get_team_summaries,
 )
-from src.utils.constants import CURRENT_SEASON, GAME_TYPE_REGULAR_SEASON, TEAM_ABBREVIATIONS
+from src.utils.constants import CURRENT_SEASON, GAME_TYPE_REGULAR_SEASON
 from src.utils.logging_config import get_logger
-from src.utils.raw_data import save_season_csv, seasons_to_collect
+from src.utils.raw_data import save_season_csv, season_team_abbrevs, seasons_to_collect
 
 logger = get_logger(__name__)
 
@@ -120,7 +124,7 @@ def _special_teams(season: str) -> pd.DataFrame:
         for summary in get_team_summaries(season, GAME_TYPE_REGULAR_SEASON)
     ]
     df = pd.DataFrame(rows, columns=["team_abbrev", "power_play_pct", "penalty_kill_pct"])
-    missing = set(TEAM_ABBREVIATIONS) - set(df["team_abbrev"])
+    missing = set(season_team_abbrevs(season)) - set(df["team_abbrev"])
     if missing:
         logger.warning("No special-teams stats for %s in %s.", sorted(missing), season)
     return df
@@ -153,11 +157,58 @@ def collect_special_teams_games(season: str = CURRENT_SEASON) -> pd.DataFrame:
     return df.sort_values(["game_date", "game_id"]).reset_index(drop=True)
 
 
+TEAM_GAME_COLUMNS = [
+    "game_id", "team_abbrev", "opponent_abbrev", "season", "game_date", "home_road",
+    "points", "goals_for", "goals_against", "shots_for", "shots_against",
+    "shot_attempts_for", "shot_attempts_against",
+    "sat_pct_5v5", "shooting_pct_5v5", "save_pct_5v5",
+]
+
+
+def collect_team_games(season: str = CURRENT_SEASON) -> pd.DataFrame:
+    """One row per team per regular-season game, from three stats API team
+    reports joined on game: summary (goals, shots, standings points earned),
+    realtime (shot attempts) and percentages (5-on-5 shot-attempt share and
+    shooting/save %). Shot attempts against come from the opponent's row for
+    the same game."""
+    logger.info("Fetching per-game team stats for %s...", season)
+    keys = ["teamId", "gameId"]
+    summary = pd.DataFrame(get_team_game_reports("summary", season, GAME_TYPE_REGULAR_SEASON))
+    if summary.empty:
+        logger.warning("No per-game team stats yet for %s.", season)
+        return pd.DataFrame(columns=TEAM_GAME_COLUMNS)
+    realtime = pd.DataFrame(get_team_game_reports("realtime", season, GAME_TYPE_REGULAR_SEASON))
+    percentages = pd.DataFrame(get_team_game_reports("percentages", season, GAME_TYPE_REGULAR_SEASON))
+
+    df = summary[keys + ["gameDate", "homeRoad", "opponentTeamAbbrev", "points", "goalsFor",
+                         "goalsAgainst", "shotsForPerGame", "shotsAgainstPerGame"]].merge(
+        realtime[keys + ["totalShotAttempts"]], on=keys, how="left"
+    ).merge(
+        percentages[keys + ["satPct", "shootingPct5v5", "savePct5v5"]], on=keys, how="left"
+    )
+    df["team_abbrev"] = df["teamId"].map(_abbrev_by_team_id())
+    opponent_attempts = df[["gameId", "team_abbrev", "totalShotAttempts"]].rename(
+        columns={"team_abbrev": "opponentTeamAbbrev", "totalShotAttempts": "shot_attempts_against"}
+    )
+    df = df.merge(opponent_attempts, on=["gameId", "opponentTeamAbbrev"], how="left")
+    df["season"] = int(season)
+    df = df.rename(columns={
+        "gameId": "game_id", "gameDate": "game_date", "homeRoad": "home_road",
+        "opponentTeamAbbrev": "opponent_abbrev", "goalsFor": "goals_for",
+        "goalsAgainst": "goals_against", "shotsForPerGame": "shots_for",
+        "shotsAgainstPerGame": "shots_against", "totalShotAttempts": "shot_attempts_for",
+        "satPct": "sat_pct_5v5", "shootingPct5v5": "shooting_pct_5v5", "savePct5v5": "save_pct_5v5",
+    })
+    logger.info("Got per-game team stats for %d team-games.", len(df))
+    return df[TEAM_GAME_COLUMNS].sort_values(["game_date", "game_id"]).reset_index(drop=True)
+
+
 def collect_team_stats(season: str = CURRENT_SEASON) -> pd.DataFrame:
     """Fetch and aggregate season stat totals for every team."""
     rows = []
-    for i, team in enumerate(TEAM_ABBREVIATIONS, start=1):
-        logger.info("[%d/%d] Fetching team stats for %s...", i, len(TEAM_ABBREVIATIONS), team)
+    teams = season_team_abbrevs(season)
+    for i, team in enumerate(teams, start=1):
+        logger.info("[%d/%d] Fetching team stats for %s...", i, len(teams), team)
         try:
             rows.append(_aggregate_team_stats(team, season))
         except NHLApiError as exc:
@@ -172,7 +223,7 @@ def collect_team_stats(season: str = CURRENT_SEASON) -> pd.DataFrame:
         df = df.merge(_special_teams(season), on="team_abbrev", how="left")
     except NHLApiError as exc:
         logger.error("Skipping special-teams stats for %s due to API failures: %s", season, exc)
-    logger.info("Collected team stats for %d/%d teams.", len(df), len(TEAM_ABBREVIATIONS))
+    logger.info("Collected team stats for %d/%d teams.", len(df), len(teams))
     return df
 
 
@@ -185,6 +236,9 @@ def main() -> None:
 
     for season in seasons_to_collect("special_teams_games"):
         save_season_csv(collect_special_teams_games(season), "special_teams_games", season)
+
+    for season in seasons_to_collect("team_games"):
+        save_season_csv(collect_team_games(season), "team_games", season)
 
 
 if __name__ == "__main__":

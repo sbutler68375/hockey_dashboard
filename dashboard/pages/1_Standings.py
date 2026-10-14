@@ -12,7 +12,7 @@ from dashboard.data import load_standings, page_header
 from dashboard.images import team_logo_url
 from dashboard.style import apply_theme, card, colors, section_label
 
-st.set_page_config(page_title="Standings", page_icon="🏒", layout="wide")
+st.set_page_config(page_title="Standings", page_icon="🏒", layout="wide", initial_sidebar_state="expanded")
 apply_theme()
 season = page_header("Standings")
 
