@@ -44,6 +44,10 @@ LOWER_IS_BETTER = {"goals_against_average"}
 RATE_STATS = {"save_pctg", "goals_against_average"}
 MIN_GAMES_FOR_RATE_STATS = 5
 
+# How the value printed at the end of each chart bar is formatted (Plotly
+# d3 format); anything not listed is a whole-number count.
+BAR_LABEL_FORMATS = {"save_pctg": ".3f", "goals_against_average": ".2f", "plus_minus": "+.0f"}
+
 TABLE_COLUMNS = {
     "skater": ["first_name", "last_name", "team_abbrev", "position_code",
                "games_played", "goals", "assists", "points", "plus_minus", "shots"],
@@ -188,7 +192,18 @@ with card("leaders_chart"):
     )
     # Best at the top of the chart either way.
     fig.update_yaxes(categoryorder="total descending" if ascending else "total ascending")
-    st.plotly_chart(style_chart(fig), width="stretch")
+    # Each player's value just past the end of their bar.
+    # One full-width bar per player: coloring by team gives each team its own
+    # offset group, which Plotly lays side by side as thin slivers in every
+    # row -- a shared group puts each player's bar back in the middle.
+    fig.update_traces(
+        offsetgroup="players",
+        texttemplate=f"%{{x:{BAR_LABEL_FORMATS.get(sort_col, '.0f')}}}",
+        textposition="outside", textfont_size=12, cliponaxis=False,
+    )
+    style_chart(fig)
+    fig.update_layout(margin=dict(r=45))  # room for the longest bar's label
+    st.plotly_chart(fig, width="stretch")
     if min_games > 1:
         st.caption(f"Chart limited to goalies with at least {min_games} games played.")
 

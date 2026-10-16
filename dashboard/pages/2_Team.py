@@ -282,7 +282,11 @@ with card("team_header"):
 
 team_rating = ratings[ratings["team_abbrev"] == team] if not ratings.empty else ratings
 with card("model_rating"):
-    section_label("Model rating")
+    section_label("Is their record for real?")
+    st.caption("A machine-learning model looks at how this team has played -- its share of shots and "
+               "goals, shooting and save %, special teams, and last season -- and predicts the points % "
+               "it should earn from here on. Compare that with its actual points % to see whether the "
+               "record looks earned, lucky, or unlucky.")
     if team_rating.empty:
         st.caption(f"Rated after {team_model.MIN_GAMES} games -- check back soon."
                    if not ratings.empty else "No model ratings yet -- go to Home and click 'Refresh all data'.")
@@ -290,9 +294,11 @@ with card("model_rating"):
         r = team_rating.iloc[0]
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Expected PT%", f"{r['expected_points_pct']:.3f}", f"{ordinal(int(r['model_rank']))} by the model",
-                  delta_color="off", delta_arrow="off")
+                  delta_color="off", delta_arrow="off",
+                  help="The share of possible points the model expects this team to earn for the rest of the season.")
         m2.metric("Actual PT%", f"{r['points_pct']:.3f}", f"{ordinal(int(r['standings_rank']))} in the standings",
-                  delta_color="off", delta_arrow="off")
+                  delta_color="off", delta_arrow="off",
+                  help="The share of possible points they've actually earned (2 per game).")
         m3.metric("Verdict", r["verdict"])
         m4.metric("Lately", r["trend"] or "After 20 games")
         for line in explain_rating(r):

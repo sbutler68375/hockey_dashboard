@@ -34,3 +34,10 @@ def player_headshot_url(player_id: int, team_abbrev: str, season: int) -> str:
     first thing to check.
     """
     return f"https://assets.nhle.com/mugs/nhl/{season}/{team_abbrev}/{player_id}.png"
+
+
+def player_action_shot_url(player_id: int) -> str:
+    """Wide (1296x729) in-game action photo of a player -- the `heroImage`
+    field of the NHL's player landing endpoint (McDavid's verified live
+    2026-10-15)."""
+    return f"https://assets.nhle.com/mugs/actionshots/1296x729/{player_id}.jpg"

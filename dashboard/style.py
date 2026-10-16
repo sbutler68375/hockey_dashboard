@@ -1,10 +1,10 @@
 """Shared visual design system for the dashboard.
 
-Design direction: a restrained "professional analytics product"
-look in a light theme (closer to a modern data/SaaS dashboard than a hockey video game)
--- clean cards, a single muted accent color, crisp sans-serif type for
-UI text and a monospace face reserved for numeric data, and small
-transitions rather than glow/animation. Paired with
+Design direction: an "ice rink" analytics product in navy / blue / ice
+blue -- a dark navy sidebar with rink markings, gradient italic page
+titles, light content cards with a blue top edge and soft blue glow,
+crisp sans-serif type for UI text and a monospace face reserved for
+numeric data. The Home page hero is the boldest use of it. Paired with
 .streamlit/config.toml, whose [theme] section sets the colors Streamlit's
 own widgets, buttons, and dataframes read directly; the palette below must
 match it.
@@ -28,7 +28,7 @@ import streamlit as st
 # Page code reads this with colors() for anything CSS can't reach (e.g. a
 # chart line color).
 PALETTE = {
-    "bg": "#eef1f5",
+    "bg": "#eef4fb",
     "panel": "#ffffff",
     "panel_alt": "#ffffff",
     "border": "rgba(15, 23, 42, 0.10)",
@@ -36,6 +36,8 @@ PALETTE = {
     "text": "#111827",
     "text_muted": "#5b6472",
     "accent": "#2563eb",
+    "accent_light": "#38bdf8",
+    "navy": "#0a1f4d",
     "positive": "#16a34a",
     "negative": "#dc2626",
     "warning": "#d97706",
@@ -50,7 +52,19 @@ FONT_FAMILY = "'Inter', -apple-system, 'Segoe UI', sans-serif"
 MONO_FAMILY = "'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace"
 
 # A restrained, muted palette for multi-series charts -- no neon.
-CHART_COLORWAY = ["#3b82f6", "#22c55e", "#f59e0b", "#a78bfa", "#ef4444", "#14b8a6"]
+CHART_COLORWAY = ["#2563eb", "#38bdf8", "#0a1f4d", "#f59e0b", "#a78bfa", "#14b8a6"]
+
+# Rink markings for the sidebar background (an SVG data URI): a blue line,
+# the dashed center line and the center-ice circle.
+SIDEBAR_RINK = (
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 260'>"
+    "<line x1='0' y1='60' x2='300' y2='60' stroke='rgba(56,189,248,0.35)' stroke-width='8'/>"
+    "<line x1='0' y1='170' x2='300' y2='170' stroke='rgba(186,230,253,0.15)' stroke-width='3' stroke-dasharray='8 6'/>"
+    "<circle cx='150' cy='170' r='62' fill='none' stroke='rgba(186,230,253,0.22)' stroke-width='2'/>"
+    "<circle cx='150' cy='170' r='4' fill='rgba(186,230,253,0.4)'/>"
+    "</svg>"
+)
+
 
 def _css(c: dict[str, str]) -> str:
     """The shared stylesheet, filled in with palette c."""
@@ -60,6 +74,17 @@ def _css(c: dict[str, str]) -> str:
 
 html, body, [class*="css"] {{
     font-family: {FONT_FAMILY};
+}}
+
+header[data-testid="stHeader"] {{
+    background: transparent;
+}}
+
+.stApp {{
+    background:
+        radial-gradient(900px 400px at 100% 0%, rgba(56, 189, 248, 0.14), transparent 70%),
+        radial-gradient(700px 360px at 0% 100%, rgba(37, 99, 235, 0.08), transparent 70%),
+        {c["bg"]};
 }}
 
 h1, h2, h3 {{
@@ -85,7 +110,8 @@ p, span, label, li {{
     font-weight: 700;
     letter-spacing: -0.01em;
     color: {c["text"]};
-    border-left: 3px solid {c["accent"]};
+    border-left: 3px solid transparent;
+    border-image: linear-gradient(180deg, {c["accent"]}, {c["accent_light"]}) 1;
     padding-left: 0.6rem;
     line-height: 1.2;
     margin-bottom: 0.5rem;
@@ -93,14 +119,14 @@ p, span, label, li {{
 
 /* Metric "cards" */
 div[data-testid="stMetric"] {{
-    background: {c["bg"]};
-    border: 1px solid {c["border"]};
+    background: linear-gradient(160deg, #f5f9ff, #eaf3fd);
+    border: 1px solid rgba(56, 189, 248, 0.28);
     border-radius: 10px;
     padding: 14px 16px;
     transition: border-color 150ms ease;
 }}
 div[data-testid="stMetric"]:hover {{
-    border-color: {c["border_strong"]};
+    border-color: rgba(56, 189, 248, 0.6);
 }}
 div[data-testid="stMetricLabel"] {{
     text-transform: uppercase;
@@ -113,7 +139,7 @@ div[data-testid="stMetricValue"] {{
     font-family: {MONO_FAMILY};
     font-weight: 600;
     font-size: 1.75rem !important;
-    color: {c["text"]};
+    color: {c["navy"]};
 }}
 div[data-testid="stMetricDelta"] {{
     font-family: {MONO_FAMILY};
@@ -124,8 +150,8 @@ div[data-testid="stMetricDelta"] {{
    season). The keyed container is the card; the metrics inside drop their
    own card styling, and the season one is smaller. */
 div[class*="st-key-metric_pair_"] {{
-    background: {c["bg"]};
-    border: 1px solid {c["border"]};
+    background: linear-gradient(160deg, #f5f9ff, #eaf3fd);
+    border: 1px solid rgba(56, 189, 248, 0.28);
     border-radius: 10px;
     padding: 14px 16px;
 }}
@@ -142,10 +168,22 @@ div[class*="st-key-metric_pair_"] div[class*="st-key-metric_secondary_"] div[dat
    because Streamlit 1.65 bordered containers have no stable selector
    of their own. */
 div[class*="st-key-card_"] {{
-    border: 1px solid {c["border_strong"]} !important;
-    border-radius: 12px !important;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(56, 189, 248, 0.30) !important;
+    border-radius: 14px !important;
     background: {c["panel_alt"]};
     margin-bottom: 0.75rem;
+    box-shadow: 0 10px 30px -18px rgba(11, 42, 107, 0.35);
+}}
+div[class*="st-key-card_"]::before {{
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, {c["navy"]}, {c["accent"]}, {c["accent_light"]});
 }}
 
 /* Buttons -- flat, with a small transition; primary/secondary colors
@@ -203,25 +241,356 @@ div[data-testid="stSelectbox"] svg {{
     padding: 6px 4px;
 }}
 
-/* Home page artwork: centered, and no taller than what's left of the
-   window under the title, so the page never needs scrolling. */
-.st-key-home_hero {{
+/* Home page -- the one place the restrained look gives way to a bolder,
+   ice-rink theme in navy / blue / ice blue.
+   Wordmark: heavy italic SHL in a blue gradient, with "Sean's Hockey
+   League" in small caps underneath. */
+.brand {{
+    display: flex;
     align-items: center;
+    gap: 0.9rem;
+    padding: 0.4rem 0 0.9rem;
 }}
-.st-key-home_hero img {{
-    max-height: calc(100vh - 260px);
-    width: auto !important;
+.brand-word {{
+    font-size: 3.1rem;
+    font-weight: 800;
+    font-style: italic;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    padding-right: 0.15em;
+    background: linear-gradient(100deg, #0a1f4d 0%, #1d4ed8 45%, #38bdf8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 2px 10px rgba(56, 189, 248, 0.35));
+    position: relative;
+}}
+.brand-word::after {{
+    content: "";
+    position: absolute;
+    left: 0.1em;
+    right: 0.3em;
+    bottom: -0.18em;
+    height: 4px;
+    border-radius: 2px;
+    transform: skewX(-20deg);
+    background: linear-gradient(90deg, #1d4ed8, #38bdf8, rgba(56, 189, 248, 0));
+}}
+.brand-word--page {{
+    font-size: 2.3rem;
+}}
+.brand--stacked {{
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+}}
+.brand-sub {{
+    margin-top: 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #0369a1;
 }}
 
-/* Sidebar */
-section[data-testid="stSidebar"] {{
+/* Hero: a dark navy "rink" panel with blue-line markings, a soft glow,
+   a slow light sweep, and a zoomed-in action photo on the right that
+   fades into the navy. */
+.hero {{
+    position: relative;
+    overflow: hidden;
+    border-radius: 18px;
+    min-height: 300px;
+    margin: 0.25rem 0 1.6rem;
+    background:
+        radial-gradient(circle at 15% 0%, rgba(56, 189, 248, 0.25), transparent 45%),
+        linear-gradient(120deg, #06122e 0%, #0b2a6b 55%, #1456b8 100%);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    box-shadow: 0 18px 40px -18px rgba(11, 42, 107, 0.65), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}}
+.hero-rink {{
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    /* markings fade in from the right so they never run behind the text */
+    -webkit-mask-image: linear-gradient(90deg, transparent 15%, #000 70%);
+    mask-image: linear-gradient(90deg, transparent 15%, #000 70%);
+}}
+.hero-glow {{
+    position: absolute;
+    right: 6%;
+    top: 50%;
+    width: 320px;
+    height: 320px;
+    transform: translateY(-50%);
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.45), transparent 65%);
+    filter: blur(8px);
+}}
+.hero-sweep {{
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 40%, rgba(186, 230, 253, 0.10) 50%, transparent 60%);
+    background-size: 250% 100%;
+    animation: hero-sweep 7s ease-in-out infinite;
+}}
+@keyframes hero-sweep {{
+    0% {{ background-position: 120% 0; }}
+    100% {{ background-position: -120% 0; }}
+}}
+@media (prefers-reduced-motion: reduce) {{
+    .hero-sweep {{ animation: none; }}
+}}
+.hero-content {{
+    position: relative;
+    z-index: 1;
+    padding: 2.4rem 2.6rem;
+    max-width: 62%;
+}}
+.hero-pill {{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #bae6fd;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    border-radius: 999px;
+    padding: 0.35rem 0.8rem;
+    margin-bottom: 1.1rem;
+}}
+.hero-dot {{
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #38bdf8;
+    box-shadow: 0 0 10px #38bdf8;
+}}
+.hero-headline {{
+    font-size: 2.5rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.08;
+    color: #ffffff;
+    margin-bottom: 0.9rem;
+}}
+.hero-headline span {{
+    background: linear-gradient(90deg, #7dd3fc, #38bdf8);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}}
+.hero .hero-lede {{
+    color: rgba(224, 242, 254, 0.82) !important;
+    font-size: 1rem;
+    max-width: 28rem;
+    margin-bottom: 1rem;
+}}
+.hero-meta {{
+    font-family: {MONO_FAMILY};
+    font-size: 0.75rem;
+    color: rgba(186, 230, 253, 0.7);
+}}
+/* The photo is 1296x729; scaling it to 165% of its box and anchoring it
+   top-right zooms in on the shooter, the goalie and the puck. */
+.hero-photo {{
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 60%;
+    background-repeat: no-repeat;
+    background-size: 165% auto;
+    background-position: 100% 8%;
+    filter: saturate(1.15) contrast(1.05);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.6) 25%, #000 50%);
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.6) 25%, #000 50%);
+}}
+/* Ice-blue tint over the photo so the white ice matches the theme. */
+.hero-photo::after {{
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(11, 42, 107, 0.55), rgba(56, 189, 248, 0.18));
+    mix-blend-mode: multiply;
+}}
+.hero-credit {{
+    position: absolute;
+    z-index: 1;
+    right: 14px;
+    bottom: 10px;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.85);
+    text-shadow: 0 1px 4px rgba(6, 18, 46, 0.8);
+}}
+@media (max-width: 900px) {{
+    .hero-content {{ max-width: 100%; }}
+    .hero-photo, .hero-credit, .hero-glow {{ display: none; }}
+}}
+
+/* Explore cards: white with a blue gradient top edge; lift and glow on hover. */
+.explore-label {{
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #0369a1;
+    margin-bottom: 0.6rem;
+}}
+div[class*="st-key-explore_"] {{
+    position: relative;
     background: {c["panel"]};
-    border-right: 1px solid {c["border"]};
+    border: 1px solid rgba(56, 189, 248, 0.30);
+    border-radius: 14px;
+    padding: 1.1rem 1.1rem 0.9rem;
+    overflow: hidden;
+    gap: 0.2rem;
+    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}}
+div[class*="st-key-explore_"]::before {{
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #1d4ed8, #38bdf8);
+}}
+div[class*="st-key-explore_"]:hover {{
+    transform: translateY(-3px);
+    border-color: rgba(56, 189, 248, 0.7);
+    box-shadow: 0 12px 28px -12px rgba(29, 78, 216, 0.45);
+}}
+div[class*="st-key-explore_"] a span[data-testid="stIconMaterial"] {{
+    color: #38bdf8;
+}}
+div[class*="st-key-explore_"] a p {{
+    font-size: 1.05rem;
+    color: #0a1f4d !important;
+}}
+
+/* Sidebar: a navy "rink" panel -- glow at the top, faint blue line and
+   center-ice circle near the bottom, the SHL wordmark above the page
+   links, numbered links, and the current page lit up in ice blue. */
+section[data-testid="stSidebar"] {{
+    background:
+        url("{SIDEBAR_RINK}") no-repeat center bottom / 100% auto,
+        radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.28), transparent 55%),
+        linear-gradient(180deg, #06122e 0%, #0b2a6b 70%, #0f3c8c 100%);
+    border-right: 1px solid rgba(56, 189, 248, 0.35);
+}}
+[data-testid="stSidebarHeader"] {{
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    height: auto;
+    padding-top: 1.6rem;
+    padding-bottom: 0.6rem;
+}}
+[data-testid="stSidebarHeader"]::after {{
+    content: "Sean's Hockey League";
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(125, 211, 252, 0.75);
+    margin-top: 0.15rem;
+}}
+[data-testid="stSidebarHeader"] [data-testid="stLogoSpacer"] {{
+    display: none;
+}}
+[data-testid="stSidebarHeader"]::before {{
+    content: "SHL";
+    font-size: 2rem;
+    font-weight: 800;
+    font-style: italic;
+    letter-spacing: 0.01em;
+    padding-right: 0.15em;
+    background: linear-gradient(100deg, #ffffff 10%, #7dd3fc 60%, #38bdf8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.45));
+}}
+[data-testid="stSidebarNavItems"] {{
+    counter-reset: navlink;
+}}
+a[data-testid="stSidebarNavLink"] {{
+    counter-increment: navlink;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    margin: 2px 0;
+    transition: background 150ms ease, border-color 150ms ease;
+}}
+a[data-testid="stSidebarNavLink"]::before {{
+    content: counter(navlink, decimal-leading-zero);
+    font-family: {MONO_FAMILY};
+    font-size: 0.7rem;
+    color: rgba(125, 211, 252, 0.6);
+    margin-right: 0.7rem;
+}}
+a[data-testid="stSidebarNavLink"] p,
+a[data-testid="stSidebarNavLink"] span {{
+    color: rgba(224, 242, 254, 0.78) !important;
+    font-weight: 500;
+}}
+a[data-testid="stSidebarNavLink"]:hover {{
+    background: rgba(56, 189, 248, 0.10) !important;
+    border-color: rgba(56, 189, 248, 0.30);
+}}
+a[data-testid="stSidebarNavLink"][aria-current="page"] {{
+    background: linear-gradient(90deg, rgba(56, 189, 248, 0.28), rgba(56, 189, 248, 0.06)) !important;
+    border-color: rgba(56, 189, 248, 0.55);
+    box-shadow: 0 0 18px -6px rgba(56, 189, 248, 0.7), inset 3px 0 0 #38bdf8;
+}}
+a[data-testid="stSidebarNavLink"][aria-current="page"]::before {{
+    color: #38bdf8;
+}}
+a[data-testid="stSidebarNavLink"][aria-current="page"] p,
+a[data-testid="stSidebarNavLink"][aria-current="page"] span {{
+    color: #ffffff !important;
+    font-weight: 700;
+}}
+[data-testid="stSidebarNav"] {{
+    border-bottom: 1px solid rgba(56, 189, 248, 0.25);
+}}
+/* Sidebar content (Home's Data panel): light text on navy, ghost button. */
+[data-testid="stSidebarUserContent"] h1,
+[data-testid="stSidebarUserContent"] h2,
+[data-testid="stSidebarUserContent"] h3 {{
+    color: #ffffff !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}}
+[data-testid="stSidebarUserContent"] p,
+[data-testid="stSidebarUserContent"] span,
+[data-testid="stSidebarUserContent"] strong {{
+    color: rgba(224, 242, 254, 0.85) !important;
+}}
+[data-testid="stSidebarUserContent"] [data-testid="stCaptionContainer"] p {{
+    color: rgba(186, 230, 253, 0.6) !important;
+}}
+[data-testid="stSidebarUserContent"] .stButton > button {{
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.55);
+}}
+[data-testid="stSidebarUserContent"] .stButton > button p {{
+    color: #e0f2fe !important;
+    font-weight: 600;
+}}
+[data-testid="stSidebarUserContent"] .stButton > button:hover {{
+    background: rgba(56, 189, 248, 0.22);
+    box-shadow: 0 0 16px -4px rgba(56, 189, 248, 0.7) !important;
 }}
 
 /* Dataframes read as cards too */
 div[data-testid="stDataFrame"] {{
-    border: 1px solid {c["border"]};
+    border: 1px solid rgba(56, 189, 248, 0.28);
     border-radius: 10px;
     overflow: hidden;
 }}

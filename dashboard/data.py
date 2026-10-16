@@ -5,6 +5,7 @@ src.database.queries directly, so caching and the refresh pipeline stay
 in one place instead of duplicated across pages.
 """
 
+import html
 import os
 import subprocess
 import sys
@@ -200,8 +201,8 @@ def previous_season() -> int:
 
 
 def selected_season() -> int:
-    """The season chosen in the page-header season picker (current season by default)."""
-    return st.session_state.get(_SEASON_STATE_KEY, current_season())
+    """The season chosen in the page-header season picker (last completed season by default)."""
+    return st.session_state.get(_SEASON_STATE_KEY, previous_season())
 
 
 def _store_season_choice() -> None:
@@ -212,17 +213,22 @@ def _season_option_label(season: int) -> str:
     return "Current" if season == current_season() else short_season_label(season)
 
 
-def page_header(title: str) -> int:
+def page_header(title: str, title_html: str | None = None) -> int:
     """Render a page title with the team logo button and the season picker
     (last season | Current, two labeled buttons) in the top-right corner,
     and return the selected season. Every page calls this in place of
     st.title() so the controls sit in the same spot everywhere; use
-    selected_team() for the team."""
+    selected_team() for the team. title_html, if given, is rendered in place
+    of the plain title (the Home page's styled wordmark)."""
     st.session_state[_SEASON_WIDGET_KEY] = selected_season()
 
     title_col, team_col, season_col = st.columns([3, 0.35, 1], vertical_alignment="center")
     with title_col:
-        st.title(title)
+        st.markdown(
+            title_html or f'<div class="brand"><span class="brand-word brand-word--page">'
+                          f'{html.escape(title)}</span></div>',
+            unsafe_allow_html=True,
+        )
     with team_col:
         _team_picker()
     with season_col:

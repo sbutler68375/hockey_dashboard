@@ -4,6 +4,6 @@ font = "sans serif"
 # dashboard/style.py has the matching palette for the custom CSS and
 # charts -- keep them in sync.
 primaryColor = "#2563eb"
-backgroundColor = "#eef1f5"
+backgroundColor = "#eef4fb"
 secondaryBackgroundColor = "#ffffff"
 textColor = "#111827"
